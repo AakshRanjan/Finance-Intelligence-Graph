@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from fmp_sdk.exception import _RetryableHTTPError
 from fmp_sdk.utils.retrySession import RetrySession
+
+if TYPE_CHECKING:
+    from fmp_sdk.chart.chart import Chart
 
 
 class FMPSession:
@@ -36,6 +39,22 @@ class FMPSession:
 
     async def close(self) -> None:
         await self._session.close()
+
+    def chart(self, symbol: str | None = None) -> Chart:
+        from fmp_sdk.chart.chart import Chart
+
+        return Chart(self, symbol)
+
+    async def get(self, path: str, **params: Any) -> Any:
+        """GET a stable API path and return parsed JSON."""
+        url = f"{self._base_url}/{path.lstrip('/')}"
+        query = {key: value for key, value in params.items() if value is not None}
+        response = await self._session.get(url, params=query)
+        try:
+            response.raise_for_status()
+            return await response.json()
+        finally:
+            response.release()
 
     async def check_connectivity(self) -> bool:
         """Return True if the FMP API is reachable and accepts the API key."""

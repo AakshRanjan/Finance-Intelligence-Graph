@@ -1,3 +1,4 @@
 from fmp_sdk.FMPSession import FMPSession
+from fmp_sdk.chart import Chart
 
-__all__ = ["FMPSession"]
+__all__ = ["Chart", "FMPSession"]
