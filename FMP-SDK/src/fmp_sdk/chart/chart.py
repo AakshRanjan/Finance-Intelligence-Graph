@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
+
+from fmp_sdk.chart.models import (
+    HistoricalChartBar,
+    HistoricalPriceEodAdjusted,
+    HistoricalPriceEodFull,
+    HistoricalPriceEodLight,
+)
 
 if TYPE_CHECKING:
     from fmp_sdk.FMPSession import FMPSession
@@ -50,9 +57,10 @@ class Chart:
         *,
         from_: str | None = None,
         to: str | None = None,
-    ) -> Any:
+    ) -> list[HistoricalPriceEodLight]:
         return await self._session.get(
             "historical-price-eod/light",
+            response_model=list[HistoricalPriceEodLight],
             **self._query(symbol, from_, to),
         )
 
@@ -62,9 +70,10 @@ class Chart:
         *,
         from_: str | None = None,
         to: str | None = None,
-    ) -> Any:
+    ) -> list[HistoricalPriceEodFull]:
         return await self._session.get(
             "historical-price-eod/full",
+            response_model=list[HistoricalPriceEodFull],
             **self._query(symbol, from_, to),
         )
 
@@ -74,9 +83,10 @@ class Chart:
         *,
         from_: str | None = None,
         to: str | None = None,
-    ) -> Any:
+    ) -> list[HistoricalPriceEodAdjusted]:
         return await self._session.get(
             "historical-price-eod/non-split-adjusted",
+            response_model=list[HistoricalPriceEodAdjusted],
             **self._query(symbol, from_, to),
         )
 
@@ -86,9 +96,10 @@ class Chart:
         *,
         from_: str | None = None,
         to: str | None = None,
-    ) -> Any:
+    ) -> list[HistoricalPriceEodAdjusted]:
         return await self._session.get(
             "historical-price-eod/dividend-adjusted",
+            response_model=list[HistoricalPriceEodAdjusted],
             **self._query(symbol, from_, to),
         )
 
@@ -99,8 +110,9 @@ class Chart:
         *,
         from_: str | None = None,
         to: str | None = None,
-    ) -> Any:
+    ) -> list[HistoricalChartBar]:
         return await self._session.get(
             f"historical-chart/{interval}",
+            response_model=list[HistoricalChartBar],
             **self._query(symbol, from_, to),
         )

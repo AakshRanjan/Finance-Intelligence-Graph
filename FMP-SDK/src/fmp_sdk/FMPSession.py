@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import aiohttp
-from fmp_sdk.exception import _RetryableHTTPError
+from fmp_sdk.exception import FMPResponseError, _RetryableHTTPError
 from fmp_sdk.utils.retrySession import RetrySession
+from pydantic import TypeAdapter, ValidationError
 
 if TYPE_CHECKING:
     from fmp_sdk.chart.chart import Chart
+
+T = TypeVar("T")
 
 
 class FMPSession:
@@ -45,16 +48,26 @@ class FMPSession:
 
         return Chart(self, symbol)
 
-    async def get(self, path: str, **params: Any) -> Any:
-        """GET a stable API path and return parsed JSON."""
+    async def get(
+        self,
+        path: str,
+        *,
+        response_model: type[T],
+        **params: Any,
+    ) -> T:
+        """GET a stable API path and return a validated pydantic payload."""
         url = f"{self._base_url}/{path.lstrip('/')}"
         query = {key: value for key, value in params.items() if value is not None}
         response = await self._session.get(url, params=query)
         try:
             response.raise_for_status()
-            return await response.json()
+            data = await response.json()
         finally:
             response.release()
+        try:
+            return TypeAdapter(response_model).validate_python(data)
+        except ValidationError as exc:
+            raise FMPResponseError(path, exc) from exc
 
     async def check_connectivity(self) -> bool:
         """Return True if the FMP API is reachable and accepts the API key."""
