@@ -1,0 +1,22 @@
+services:
+  timescaledb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fig-timescaledb:local
+    container_name: fig-timescaledb-local
+    ports:
+      - "5432:5432"
+    env_file: local.env
+    volumes:
+      - timescaledb_local_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    shm_size: 128mb
+    restart: "no"
+
+volumes:
+  timescaledb_local_data:

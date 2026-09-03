@@ -1,0 +1,25 @@
+services:
+  timescaledb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fig-timescaledb:staging
+    container_name: fig-timescaledb
+    env_file: staging.env
+    volumes:
+      - timescaledb_staging_data:/var/lib/postgresql
+    restart: unless-stopped
+    shm_size: 256mb
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  timescaledb_staging_data:
