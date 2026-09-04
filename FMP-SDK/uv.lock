@@ -143,8 +143,8 @@ wheels = [
 ]
 
 [[package]]
-name = "fmp-sdk"
-version = "0.1.0"
+name = "financialmodelingprep-sdk"
+version = "0.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },

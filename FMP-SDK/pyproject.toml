@@ -1,15 +1,68 @@
 [project]
-name = "fmp-sdk"
-version = "0.1.0"
-description = "Add your description here"
+name = "financialmodelingprep-sdk"
+version = "0.0.0"
+description = "Async Python SDK for the Financial Modeling Prep stable API."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Aaksh Ranjan" }]
 requires-python = ">=3.12"
+keywords = [
+    "fmp",
+    "financial-modeling-prep",
+    "finance",
+    "stocks",
+    "sdk",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
 dependencies = [
     "aiohttp>=3.14.3",
     "pydantic>=2.13.5",
     "tenacity>=9.1.4",
 ]
 
+[project.urls]
+Homepage = "https://github.com/AakshRanjan/Finance-Intelligence-Graph"
+Repository = "https://github.com/AakshRanjan/Finance-Intelligence-Graph"
+Issues = "https://github.com/AakshRanjan/Finance-Intelligence-Graph/issues"
+Changelog = "https://github.com/AakshRanjan/Finance-Intelligence-Graph/blob/master/FMP-SDK/CHANGELOG.md"
+
 [build-system]
 requires = ["uv_build>=0.9.10,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "fmp_sdk"
+
+[tool.semantic_release]
+commit_parser = "conventional-monorepo"
+version_toml = ["pyproject.toml:project.version"]
+tag_format = "fmp-sdk-v{version}"
+allow_zero_version = true
+major_on_zero = false
+assets = ["uv.lock"]
+commit_message = "chore(release): fmp-sdk@{version}"
+build_command = """
+pip install uv
+uv lock --upgrade-package "$PACKAGE_NAME"
+git add uv.lock
+uv build
+"""
+
+[tool.semantic_release.commit_parser_options]
+path_filters = ["."]
+
+[tool.semantic_release.changelog]
+mode = "update"
+insertion_flag = "<!-- version list -->"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
