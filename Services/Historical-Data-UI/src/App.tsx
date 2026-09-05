@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Loader2Icon } from 'lucide-react'
 
 import {
   fetchEod,
   fetchHealth,
   fetchIntraday,
   fetchSymbols,
-} from './api/client'
-import { defaultRange, rangeQuery } from './api/dates'
+  isAbortError,
+} from '@/api/client'
+import { defaultRange, rangeFromPreset, rangeQuery, type RangePreset } from '@/api/dates'
 import {
   API_BAR_LIMIT,
   CHART_INTERVALS,
@@ -14,11 +16,17 @@ import {
   type ChartInterval,
   type Mode,
   type SymbolInfo,
-} from './api/types'
-import { BarsTable } from './components/BarsTable'
-import { PriceChart } from './components/PriceChart'
-import { StatusBanner } from './components/StatusBanner'
-import { Toolbar } from './components/Toolbar'
+} from '@/api/types'
+import { BarsTable } from '@/components/BarsTable'
+import { ModeToggle } from '@/components/ModeToggle'
+import { PriceChart } from '@/components/PriceChart'
+import { StatusBanner } from '@/components/StatusBanner'
+import { Toolbar } from '@/components/Toolbar'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+
+const LOAD_DEBOUNCE_MS = 300
+const REFRESH_MS = 5 * 60 * 1000
 
 function firstAvailableInterval(
   listed: SymbolInfo | undefined,
@@ -57,6 +65,12 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [catalogReady, setCatalogReady] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
+  const filtersRef = useRef({ symbol, mode, from, to, interval })
+
+  useEffect(() => {
+    filtersRef.current = { symbol, mode, from, to, interval }
+  }, [symbol, mode, from, to, interval])
 
   const listed = catalog.find(
     (item) => item.symbol === symbol.trim().toUpperCase(),
@@ -65,9 +79,16 @@ export default function App() {
   const loadBars = useCallback(async (params: LoadParams) => {
     const trimmed = params.symbol.trim().toUpperCase()
     if (trimmed === '') {
-      setError('Enter a symbol.')
       return
     }
+    if (params.from > params.to) {
+      setInfo('From must be on or before To.')
+      setError(null)
+      return
+    }
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     setError(null)
     setInfo(null)
@@ -75,13 +96,17 @@ export default function App() {
       const query = rangeQuery(params.mode, params.from, params.to)
       const result =
         params.mode === 'eod'
-          ? await fetchEod(trimmed, query.from, query.to)
+          ? await fetchEod(trimmed, query.from, query.to, controller.signal)
           : await fetchIntraday(
               trimmed,
               params.interval,
               query.from,
               query.to,
+              controller.signal,
             )
+      if (controller.signal.aborted) {
+        return
+      }
       setBars(result)
       setSymbol(trimmed)
       if (result.length === 0) {
@@ -92,19 +117,24 @@ export default function App() {
         )
       }
     } catch (cause) {
+      if (isAbortError(cause) || controller.signal.aborted) {
+        return
+      }
       setBars([])
       setError(cause instanceof Error ? cause.message : 'Failed to load bars.')
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) {
+        setLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     void (async () => {
       try {
-        const catalogResponse = await fetchSymbols()
-        if (cancelled) {
+        const catalogResponse = await fetchSymbols(controller.signal)
+        if (controller.signal.aborted) {
           return
         }
         setCatalog(catalogResponse.items)
@@ -123,35 +153,89 @@ export default function App() {
         setFrom(range.from)
         setTo(range.to)
         setInterval(nextInterval)
-        await loadBars({
-          symbol: preferred.symbol,
-          mode: nextMode,
-          from: range.from,
-          to: range.to,
-          interval: nextInterval,
-        })
-      } catch {
-        if (cancelled) {
+      } catch (cause) {
+        if (isAbortError(cause) || controller.signal.aborted) {
           return
         }
         try {
-          await fetchHealth()
+          await fetchHealth(controller.signal)
           setError('Could not load the symbol catalog.')
-        } catch {
+        } catch (healthCause) {
+          if (isAbortError(healthCause) || controller.signal.aborted) {
+            return
+          }
           setError(
             'Historical Data API is unreachable. Is it running on port 8000?',
           )
         }
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setCatalogReady(true)
         }
       }
     })()
     return () => {
-      cancelled = true
+      controller.abort()
     }
+  }, [])
+
+  const refreshCatalogAndBars = useCallback(async () => {
+    const params = filtersRef.current
+    try {
+      const catalogResponse = await fetchSymbols()
+      setCatalog(catalogResponse.items)
+      if (catalogResponse.items.length === 0) {
+        setInfo('No symbols ingested yet. Type a symbol or run the ingester.')
+      }
+    } catch (cause) {
+      if (isAbortError(cause)) {
+        return
+      }
+      try {
+        await fetchHealth()
+        setError('Could not load the symbol catalog.')
+      } catch (healthCause) {
+        if (isAbortError(healthCause)) {
+          return
+        }
+        setError(
+          'Historical Data API is unreachable. Is it running on port 8000?',
+        )
+      }
+      return
+    }
+    await loadBars(params)
   }, [loadBars])
+
+  useEffect(() => {
+    if (!catalogReady) {
+      return
+    }
+    const timer = window.setTimeout(() => {
+      void loadBars({ symbol, mode, from, to, interval })
+    }, LOAD_DEBOUNCE_MS)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [catalogReady, symbol, mode, from, to, interval, loadBars])
+
+  useEffect(() => {
+    if (!catalogReady) {
+      return
+    }
+    const timer = window.setInterval(() => {
+      void refreshCatalogAndBars()
+    }, REFRESH_MS)
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [catalogReady, refreshCatalogAndBars])
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   function handleModeChange(next: Mode) {
     const range = defaultRange(next)
@@ -160,7 +244,6 @@ export default function App() {
     setFrom(range.from)
     setTo(range.to)
     setInterval(nextInterval)
-    setBars([])
     setInfo(null)
     setError(null)
   }
@@ -173,18 +256,39 @@ export default function App() {
     setInterval((current) => firstAvailableInterval(match, current))
   }
 
+  function handlePreset(preset: RangePreset) {
+    const range = rangeFromPreset(preset)
+    setFrom(range.from)
+    setTo(range.to)
+  }
+
   const chartPlaceholder =
     !catalogReady || (loading && bars.length === 0)
       ? 'Loading…'
       : bars.length === 0
-        ? 'Load a symbol to see the chart'
+        ? 'Enter a symbol to see the chart'
         : null
+  const chartLoading = chartPlaceholder === 'Loading…'
+  const displaySymbol = symbol.trim().toUpperCase()
 
   return (
-    <div className="page">
-      <header className="header">
-        <h1>Historical Data</h1>
-        <p>OHLCV bars from TimescaleDB via the Historical Data API.</p>
+    <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-4 bg-background p-4 text-foreground md:p-6">
+      <a
+        href="#price-chart"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-ring"
+      >
+        Skip to chart
+      </a>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Historical Data
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            OHLCV bars from TimescaleDB via the Historical Data API.
+          </p>
+        </div>
+        <ModeToggle />
       </header>
 
       <Toolbar
@@ -194,32 +298,49 @@ export default function App() {
         to={to}
         interval={interval}
         catalog={catalog}
-        loading={loading}
         onModeChange={handleModeChange}
         onSymbolChange={handleSymbolChange}
         onFromChange={setFrom}
         onToChange={setTo}
         onIntervalChange={setInterval}
-        onLoad={() => {
-          void loadBars({ symbol, mode, from, to, interval })
-        }}
+        onPreset={handlePreset}
       />
 
-      {error ? <StatusBanner message={error} tone="error" /> : null}
-      {info && !error ? <StatusBanner message={info} /> : null}
-      {loading && bars.length > 0 ? (
-        <StatusBanner message="Loading bars…" />
-      ) : null}
+      <main aria-busy={loading} className="flex min-h-0 flex-1 flex-col gap-4">
+        {error ? <StatusBanner message={error} tone="error" /> : null}
+        {info && !error ? <StatusBanner message={info} /> : null}
 
-      <section className="chart-panel" aria-label="Price chart">
-        {chartPlaceholder !== null ? (
-          <div className="chart-empty">{chartPlaceholder}</div>
-        ) : (
-          <PriceChart bars={bars} mode={mode} />
-        )}
-      </section>
+        <Card
+          id="price-chart"
+          role="region"
+          aria-label="Price chart"
+          className="relative flex min-h-[360px] flex-1 flex-col overflow-hidden py-0 max-md:min-h-[280px]"
+          style={{ flexBasis: '58vh' }}
+        >
+          <CardContent className="flex min-h-[360px] flex-1 p-0 max-md:min-h-[280px]">
+            {chartPlaceholder !== null ? (
+              <div className="flex min-h-[360px] w-full flex-1 items-center justify-center text-muted-foreground max-md:min-h-[280px]">
+                {chartLoading ? (
+                  <Skeleton className="h-4 w-32" />
+                ) : (
+                  chartPlaceholder
+                )}
+              </div>
+            ) : (
+              <PriceChart bars={bars} mode={mode} symbol={displaySymbol} />
+            )}
+          </CardContent>
+          {loading && bars.length > 0 ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/50">
+              <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" />
+            </div>
+          ) : null}
+        </Card>
 
-      {bars.length > 0 ? <BarsTable bars={bars} mode={mode} /> : null}
+        {bars.length > 0 ? (
+          <BarsTable bars={bars} mode={mode} symbol={displaySymbol} />
+        ) : null}
+      </main>
     </div>
   )
 }

@@ -28,11 +28,19 @@ function buildUrl(
   return `${API_BASE}${path}${suffix}`
 }
 
+export function isAbortError(cause: unknown): boolean {
+  return (
+    (cause instanceof DOMException && cause.name === 'AbortError') ||
+    (cause instanceof Error && cause.name === 'AbortError')
+  )
+}
+
 async function getJson<T>(
   path: string,
   query?: Record<string, string | undefined>,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(buildUrl(path, query))
+  const response = await fetch(buildUrl(path, query), { signal })
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`
     try {
@@ -53,23 +61,25 @@ async function getJson<T>(
   return (await response.json()) as T
 }
 
-export async function fetchHealth(): Promise<void> {
-  await getJson('/health')
+export async function fetchHealth(signal?: AbortSignal): Promise<void> {
+  await getJson('/health', undefined, signal)
 }
 
-export async function fetchSymbols(): Promise<SymbolCatalog> {
-  return getJson<SymbolCatalog>('/v1/symbols')
+export async function fetchSymbols(signal?: AbortSignal): Promise<SymbolCatalog> {
+  return getJson<SymbolCatalog>('/v1/symbols', undefined, signal)
 }
 
 export async function fetchEod(
   symbol: string,
   from: string,
   to: string,
+  signal?: AbortSignal,
 ): Promise<EodBar[]> {
-  return getJson<EodBar[]>(`/v1/eod/${encodeURIComponent(symbol)}`, {
-    from,
-    to,
-  })
+  return getJson<EodBar[]>(
+    `/v1/eod/${encodeURIComponent(symbol)}`,
+    { from, to },
+    signal,
+  )
 }
 
 export async function fetchIntraday(
@@ -77,10 +87,15 @@ export async function fetchIntraday(
   interval: ChartInterval,
   from: string,
   to: string,
+  signal?: AbortSignal,
 ): Promise<IntradayBar[]> {
-  return getJson<IntradayBar[]>(`/v1/intraday/${encodeURIComponent(symbol)}`, {
-    interval,
-    from,
-    to,
-  })
+  return getJson<IntradayBar[]>(
+    `/v1/intraday/${encodeURIComponent(symbol)}`,
+    {
+      interval,
+      from,
+      to,
+    },
+    signal,
+  )
 }
