@@ -1,22 +1,22 @@
-name: CI Historical-Data-UI
+name: CI FIG-UI
 
 on:
   pull_request:
     paths:
-      - "Services/Historical-Data-UI/**"
-      - ".github/workflows/ci-historical-data-ui.yml"
+      - "Services/FIG-UI/**"
+      - ".github/workflows/ci-fig-ui.yml"
   push:
     branches: [master]
     paths:
-      - "Services/Historical-Data-UI/**"
-      - ".github/workflows/ci-historical-data-ui.yml"
+      - "Services/FIG-UI/**"
+      - ".github/workflows/ci-fig-ui.yml"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Services/Historical-Data-UI
+        working-directory: Services/FIG-UI
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: Services/Historical-Data-UI/package-lock.json
+          cache-dependency-path: Services/FIG-UI/package-lock.json
 
       - name: Install
         run: npm ci

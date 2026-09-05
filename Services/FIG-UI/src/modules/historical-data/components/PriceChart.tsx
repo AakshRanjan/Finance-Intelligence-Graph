@@ -1,4 +1,4 @@
-import type { Bar, EodBar, Mode } from '@/api/types'
+import type { Bar, EodBar, Mode } from '@/modules/historical-data/api/types'
 import {
   ChartContainer,
   ChartTooltip,
@@ -17,7 +17,7 @@ import {
 
 const UP = '#26a69a'
 const DOWN = '#ef5350'
-const WICK = '#ffffff'
+const WICK = 'var(--foreground)'
 const MAX_CHART_POINTS = 400
 const VOLUME_BAND = 0.22
 const PRICE_BAND = 1 - VOLUME_BAND

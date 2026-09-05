@@ -7,8 +7,13 @@ import {
   fetchIntraday,
   fetchSymbols,
   isAbortError,
-} from '@/api/client'
-import { defaultRange, rangeFromPreset, rangeQuery, type RangePreset } from '@/api/dates'
+} from '@/modules/historical-data/api/client'
+import {
+  defaultRange,
+  rangeFromPreset,
+  rangeQuery,
+  type RangePreset,
+} from '@/modules/historical-data/api/dates'
 import {
   API_BAR_LIMIT,
   CHART_INTERVALS,
@@ -16,12 +21,11 @@ import {
   type ChartInterval,
   type Mode,
   type SymbolInfo,
-} from '@/api/types'
-import { BarsTable } from '@/components/BarsTable'
-import { ModeToggle } from '@/components/ModeToggle'
-import { PriceChart } from '@/components/PriceChart'
-import { StatusBanner } from '@/components/StatusBanner'
-import { Toolbar } from '@/components/Toolbar'
+} from '@/modules/historical-data/api/types'
+import { BarsTable } from '@/modules/historical-data/components/BarsTable'
+import { PriceChart } from '@/modules/historical-data/components/PriceChart'
+import { StatusBanner } from '@/modules/historical-data/components/StatusBanner'
+import { Toolbar } from '@/modules/historical-data/components/Toolbar'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -52,7 +56,7 @@ interface LoadParams {
   interval: ChartInterval
 }
 
-export default function App() {
+export function HistoricalDataPage() {
   const initial = defaultRange('eod')
   const [mode, setMode] = useState<Mode>('eod')
   const [symbol, setSymbol] = useState('')
@@ -272,24 +276,13 @@ export default function App() {
   const displaySymbol = symbol.trim().toUpperCase()
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-4 bg-background p-4 text-foreground md:p-6">
+    <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4 p-4 text-foreground md:p-6">
       <a
         href="#price-chart"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-ring"
       >
         Skip to chart
       </a>
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Historical Data
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            OHLCV bars from TimescaleDB via the Historical Data API.
-          </p>
-        </div>
-        <ModeToggle />
-      </header>
 
       <Toolbar
         mode={mode}
@@ -306,7 +299,7 @@ export default function App() {
         onPreset={handlePreset}
       />
 
-      <main aria-busy={loading} className="flex min-h-0 flex-1 flex-col gap-4">
+      <div aria-busy={loading} className="flex min-h-0 flex-1 flex-col gap-4">
         {error ? <StatusBanner message={error} tone="error" /> : null}
         {info && !error ? <StatusBanner message={info} /> : null}
 
@@ -340,7 +333,7 @@ export default function App() {
         {bars.length > 0 ? (
           <BarsTable bars={bars} mode={mode} symbol={displaySymbol} />
         ) : null}
-      </main>
+      </div>
     </div>
   )
 }

@@ -34,9 +34,9 @@ services:
   ui:
     build:
       context: ..
-      dockerfile: Services/Historical-Data-UI/Dockerfile
-    image: fig-historical-data-ui:local
-    container_name: fig-historical-data-ui
+      dockerfile: Services/FIG-UI/Dockerfile
+    image: fig-ui:local
+    container_name: fig-ui
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:

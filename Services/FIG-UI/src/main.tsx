@@ -3,12 +3,15 @@ import { createRoot } from 'react-dom/client'
 
 import App from './App.tsx'
 import { ThemeProvider } from '@/components/theme-provider'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
-      <App />
+      <TooltipProvider>
+        <App />
+      </TooltipProvider>
     </ThemeProvider>
   </StrictMode>,
 )

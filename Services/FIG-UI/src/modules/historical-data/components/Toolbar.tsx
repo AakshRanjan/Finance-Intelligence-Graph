@@ -3,13 +3,13 @@ import {
   INTRADAY_PRESETS,
   matchingPreset,
   type RangePreset,
-} from '@/api/dates'
+} from '@/modules/historical-data/api/dates'
 import {
   CHART_INTERVALS,
   type ChartInterval,
   type Mode,
   type SymbolInfo,
-} from '@/api/types'
+} from '@/modules/historical-data/api/types'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Combobox,

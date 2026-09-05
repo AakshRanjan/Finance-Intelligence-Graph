@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
-import type { Bar, EodBar, Mode } from '@/api/types'
+import type { Bar, EodBar, Mode } from '@/modules/historical-data/api/types'
 import { Card } from '@/components/ui/card'
 import {
   Table,
