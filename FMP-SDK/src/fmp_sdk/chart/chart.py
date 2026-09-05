@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from fmp_sdk.chart.models import (
+    ChartInterval,
     HistoricalChartBar,
     HistoricalPriceEodAdjusted,
     HistoricalPriceEodFull,
@@ -11,8 +12,6 @@ from fmp_sdk.chart.models import (
 
 if TYPE_CHECKING:
     from fmp_sdk.FMPSession import FMPSession
-
-ChartInterval = Literal["1min", "5min", "15min", "30min", "1hour", "4hour"]
 
 
 def _normalize_symbol(symbol: str | None) -> str | None:

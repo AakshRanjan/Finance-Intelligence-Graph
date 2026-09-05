@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import Field
 
 from fmp_sdk.models import FMPBaseModel
+
+ChartInterval = Literal["1min", "5min", "15min", "30min", "1hour", "4hour"]
 
 
 class HistoricalPriceEodLight(FMPBaseModel):

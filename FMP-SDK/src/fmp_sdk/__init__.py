@@ -3,6 +3,7 @@ from importlib.metadata import PackageNotFoundError, version
 from fmp_sdk.FMPSession import FMPSession
 from fmp_sdk.chart import (
     Chart,
+    ChartInterval,
     HistoricalChartBar,
     HistoricalPriceEodAdjusted,
     HistoricalPriceEodFull,
@@ -17,6 +18,7 @@ except PackageNotFoundError:
 
 __all__ = [
     "Chart",
+    "ChartInterval",
     "FMPResponseError",
     "FMPSession",
     "HistoricalChartBar",
