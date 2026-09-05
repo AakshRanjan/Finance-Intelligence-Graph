@@ -1,6 +1,8 @@
 # API + UI: docker compose up  →  http://localhost:8080
 # API only:  http://localhost:8000/docs
-# Ingest: docker compose --profile ingest run --rm ingest --symbols AAPL --lookback 30d --chunk-size 7d
+# Ingest: copy config.yaml.sample to config.yaml, then
+# docker compose --profile ingest run --rm ingest
+# Other file: INGEST_CONFIG=/path/to/config.yaml docker compose --profile ingest run --rm ingest
 include:
   - path: ../Databases/docker-compose.yml
 
@@ -51,6 +53,9 @@ services:
       dockerfile: Services/Historical-Data-Ingester/Dockerfile
     image: fig-historical-data-ingest:local
     env_file: .env
+    volumes:
+      - ${INGEST_CONFIG:-../Services/Historical-Data-Ingester/config.yaml}:/config/config.yaml:ro
+    command: ["--config", "/config/config.yaml"]
     depends_on:
       api:
         condition: service_healthy
