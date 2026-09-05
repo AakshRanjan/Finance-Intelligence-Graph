@@ -10,6 +10,7 @@ from pydantic import TypeAdapter, ValidationError
 
 if TYPE_CHECKING:
     from fmp_sdk.chart.chart import Chart
+    from fmp_sdk.corporate_actions.corporate_actions import CorporateActions
 
 T = TypeVar("T")
 
@@ -47,6 +48,11 @@ class FMPSession:
         from fmp_sdk.chart.chart import Chart
 
         return Chart(self, symbol)
+
+    def corporate_actions(self, symbol: str | None = None) -> CorporateActions:
+        from fmp_sdk.corporate_actions.corporate_actions import CorporateActions
+
+        return CorporateActions(self, symbol)
 
     async def get(
         self,

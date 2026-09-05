@@ -22,12 +22,14 @@ async def main() -> None:
     async with FMPSession("YOUR_API_KEY") as session:
         bars = await session.chart("AAPL").historical_price_eod_light()
         print(bars[0].date, bars[0].price)
+        dividends = await session.corporate_actions("AAPL").dividends()
+        print(dividends[0].date, dividends[0].dividend)
 
 
 asyncio.run(main())
 ```
 
-`FMPSession.chart(symbol)` binds a symbol so you do not pass it on every call. You can also pass `symbol=` per request.
+`FMPSession.chart(symbol)` and `FMPSession.corporate_actions(symbol)` bind a symbol so you do not pass it on every call. You can also pass `symbol=` per request.
 
 ## Versioning
 

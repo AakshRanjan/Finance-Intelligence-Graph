@@ -9,6 +9,7 @@ from fmp_sdk.chart import (
     HistoricalPriceEodFull,
     HistoricalPriceEodLight,
 )
+from fmp_sdk.corporate_actions import CorporateActions, Dividend, Earning, Split
 from fmp_sdk.exception import FMPResponseError
 
 try:
@@ -19,11 +20,15 @@ except PackageNotFoundError:
 __all__ = [
     "Chart",
     "ChartInterval",
+    "CorporateActions",
+    "Dividend",
+    "Earning",
     "FMPResponseError",
     "FMPSession",
     "HistoricalChartBar",
     "HistoricalPriceEodAdjusted",
     "HistoricalPriceEodFull",
     "HistoricalPriceEodLight",
+    "Split",
     "__version__",
 ]
