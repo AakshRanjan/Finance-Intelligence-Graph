@@ -1,0 +1,41 @@
+[project]
+name = "historical-data-api"
+version = "0.1.0"
+description = "FastAPI service for historical OHLCV bars in TimescaleDB."
+authors = [{ name = "Aaksh Ranjan" }]
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.16.5",
+    "asyncpg>=0.30.0",
+    "fastapi>=0.118.0",
+    "financialmodelingprep-sdk>=0.2.0",
+    "psycopg[binary]>=3.2.10",
+    "pydantic-settings>=2.11.0",
+    "sqlalchemy>=2.0.43",
+    "uvicorn[standard]>=0.37.0",
+]
+
+[project.scripts]
+historical-data-api = "historical_data_api.main:run"
+
+[build-system]
+requires = ["uv_build>=0.9.10,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "historical_data_api"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+    "integration: requires TimescaleDB",
+]

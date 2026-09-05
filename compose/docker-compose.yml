@@ -1,0 +1,57 @@
+# API + UI: docker compose up  →  http://localhost:8080
+# API only:  http://localhost:8000/docs
+# Ingest: docker compose --profile ingest run --rm ingest --symbols AAPL --lookback 30d --chunk-size 7d
+include:
+  - path: ../Databases/docker-compose.yml
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: APIs/Historical-Data/Dockerfile
+    image: fig-historical-data-api:local
+    container_name: fig-historical-data-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file: .env
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: "no"
+
+  ui:
+    build:
+      context: ..
+      dockerfile: Services/Historical-Data-UI/Dockerfile
+    image: fig-historical-data-ui:local
+    container_name: fig-historical-data-ui
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: "no"
+
+  ingest:
+    profiles: ["ingest"]
+    build:
+      context: ..
+      dockerfile: Services/Historical-Data-Ingester/Dockerfile
+    image: fig-historical-data-ingest:local
+    env_file: .env
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: "no"

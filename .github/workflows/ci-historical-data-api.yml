@@ -1,0 +1,54 @@
+name: CI Historical-Data-API
+
+on:
+  pull_request:
+    paths:
+      - "APIs/Historical-Data/**"
+      - ".github/workflows/ci-historical-data-api.yml"
+  push:
+    branches: [master]
+    paths:
+      - "APIs/Historical-Data/**"
+      - ".github/workflows/ci-historical-data-api.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APIs/Historical-Data
+    services:
+      timescaledb:
+        image: timescale/timescaledb:2.29.2-pg18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: finance_intelligence
+          TIMESCALEDB_TELEMETRY: off
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d finance_intelligence"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/finance_intelligence
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          working-directory: APIs/Historical-Data
+
+      - name: Sync
+        run: uv sync --locked --group dev
+
+      - name: Test
+        run: uv run pytest
+
+      - name: Build
+        run: uv build

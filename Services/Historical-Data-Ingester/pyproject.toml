@@ -1,0 +1,33 @@
+[project]
+name = "historical-data-ingest"
+version = "0.1.0"
+description = "CLI job that fetches FMP historical bars and PUTs them to the Historical Data API."
+authors = [{ name = "Aaksh Ranjan" }]
+requires-python = ">=3.12"
+dependencies = [
+    "financialmodelingprep-sdk>=0.2.0",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.11.0",
+    "typer>=0.19.2",
+]
+
+[project.scripts]
+historical-data-ingest = "historical_data_ingest.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.9.10,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "historical_data_ingest"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

@@ -1,0 +1,38 @@
+name: CI Historical-Data-UI
+
+on:
+  pull_request:
+    paths:
+      - "Services/Historical-Data-UI/**"
+      - ".github/workflows/ci-historical-data-ui.yml"
+  push:
+    branches: [master]
+    paths:
+      - "Services/Historical-Data-UI/**"
+      - ".github/workflows/ci-historical-data-ui.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Services/Historical-Data-UI
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Services/Historical-Data-UI/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
