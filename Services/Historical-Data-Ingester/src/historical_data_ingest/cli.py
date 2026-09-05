@@ -2,60 +2,36 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Annotated
 
 import typer
-from fmp_sdk import ChartInterval
 
 from historical_data_ingest.config import get_ingest_settings
-from historical_data_ingest.ingest import parse_datasets, parse_symbols, run_ingest
-
-ALLOWED_INTERVALS: tuple[ChartInterval, ...] = (
-    "1min",
-    "5min",
-    "15min",
-    "30min",
-    "1hour",
-    "4hour",
-)
+from historical_data_ingest.ingest import run_ingest
+from historical_data_ingest.rate_limit import SlidingWindowRateLimiter
+from historical_data_ingest.yaml_config import load_ingest_yaml, resolved_jobs
 
 
 def ingest(
-    symbols: Annotated[str, typer.Option(help="Comma-separated ticker list")],
-    lookback: Annotated[str, typer.Option(help="How far back, e.g. 365d or 2y")],
-    chunk_size: Annotated[
-        str,
-        typer.Option("--chunk-size", help="FMP date window per request, e.g. 30d"),
-    ],
-    datasets: Annotated[
-        str,
-        typer.Option(help="Comma-separated: eod, intraday"),
-    ] = "eod,intraday",
-    interval: Annotated[
-        str,
-        typer.Option(help="Intraday interval"),
-    ] = "1min",
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Path to ingest config.yaml"),
+    ] = Path("config.yaml"),
 ) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    if interval not in ALLOWED_INTERVALS:
-        raise typer.BadParameter(
-            f"interval must be one of {', '.join(ALLOWED_INTERVALS)}",
-            param_hint="--interval",
-        )
+    try:
+        yaml_cfg = load_ingest_yaml(config)
+        jobs = resolved_jobs(yaml_cfg)
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--config") from exc
     settings = get_ingest_settings()
-    asyncio.run(
-        run_ingest(
-            settings,
-            parse_symbols(symbols),
-            lookback,
-            chunk_size,
-            parse_datasets(datasets),
-            interval,  # type: ignore[arg-type]
-        )
-    )
+    fmp_limiter = SlidingWindowRateLimiter(yaml_cfg.num_api_calls_per_min)
+    local_limiter = SlidingWindowRateLimiter(yaml_cfg.num_local_api_calls_per_min)
+    asyncio.run(run_ingest(settings, jobs, fmp_limiter, local_limiter))
 
 
 def app() -> None:

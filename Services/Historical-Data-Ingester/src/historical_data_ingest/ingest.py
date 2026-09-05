@@ -3,15 +3,21 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from datetime import date
 
 import aiohttp
 import httpx
 from fmp_sdk import (
+    Chart,
     ChartInterval,
+    Dividend,
+    Earning,
     FMPSession,
     HistoricalChartBar,
     HistoricalPriceEodFull,
+    Split,
 )
 from fmp_sdk.exception import FMPResponseError
 from fmp_sdk.modified import EodBar, IntradayBar
@@ -23,10 +29,30 @@ from historical_data_ingest.chunking import (
     parse_duration,
 )
 from historical_data_ingest.config import IngestSettings
+from historical_data_ingest.rate_limit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-DATASETS = ("eod", "intraday")
+DATASETS = ("eod", "intraday", "dividends", "earnings", "splits")
+BAR_DATASETS = frozenset({"eod", "intraday"})
+CORPORATE_DATASETS = ("dividends", "earnings", "splits")
+ALLOWED_INTERVALS: tuple[ChartInterval, ...] = (
+    "1min",
+    "5min",
+    "15min",
+    "30min",
+    "1hour",
+    "4hour",
+)
+
+
+@dataclass(frozen=True)
+class SymbolJob:
+    symbol: str
+    lookback: str
+    chunk_size: str
+    datasets: list[str]
+    interval: ChartInterval
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -43,14 +69,21 @@ def parse_symbols(raw: str) -> list[str]:
     return list(dict.fromkeys(symbols))
 
 
-def parse_datasets(raw: str) -> list[str]:
-    datasets = [part.strip().lower() for part in raw.split(",") if part.strip()]
-    unknown = [item for item in datasets if item not in DATASETS]
+def parse_dataset_list(datasets: list[str]) -> list[str]:
+    items = [part.strip().lower() for part in datasets if part.strip()]
+    unknown = [item for item in items if item not in DATASETS]
     if unknown:
-        raise ValueError(f"unknown datasets {unknown}; expected eod and/or intraday")
-    if not datasets:
+        raise ValueError(
+            f"unknown datasets {unknown}; expected eod, intraday, "
+            "dividends, earnings, and/or splits"
+        )
+    if not items:
         raise ValueError("at least one dataset is required")
-    return list(dict.fromkeys(datasets))
+    return list(dict.fromkeys(items))
+
+
+def parse_datasets(raw: str) -> list[str]:
+    return parse_dataset_list([part for part in raw.split(",")])
 
 
 def eod_to_write(bar: HistoricalPriceEodFull) -> EodBar:
@@ -160,6 +193,64 @@ async def put_intraday(
     return int(response.json()["count"])
 
 
+async def put_corporate_actions(
+    client: httpx.AsyncClient,
+    base_url: str,
+    dataset: str,
+    symbol: str,
+    rows: list[Dividend] | list[Earning] | list[Split],
+) -> int:
+    response = await client.put(
+        f"{base_url.rstrip('/')}/v1/{dataset}/{symbol}",
+        json=[row.model_dump(mode="json", by_alias=True) for row in rows],
+    )
+    response.raise_for_status()
+    return int(response.json()["count"])
+
+
+async def _acquire(rate_limiter: RateLimiter | None) -> None:
+    if rate_limiter is not None:
+        await rate_limiter.acquire()
+
+
+async def ingest_corporate_actions(
+    session: FMPSession,
+    client: httpx.AsyncClient,
+    settings: IngestSettings,
+    symbol: str,
+    datasets: list[str],
+    rate_limiter: RateLimiter | None = None,
+    local_rate_limiter: RateLimiter | None = None,
+) -> int:
+    upserted = 0
+    actions = session.corporate_actions(symbol)
+    fetchers = {
+        "dividends": actions.dividends,
+        "earnings": actions.earnings,
+        "splits": actions.splits,
+    }
+    for dataset in CORPORATE_DATASETS:
+        if dataset not in datasets:
+            continue
+        await _acquire(rate_limiter)
+        rows = await fetchers[dataset]()
+        if not rows:
+            logger.info("skip empty %s symbol=%s", dataset, symbol)
+            continue
+        await _acquire(local_rate_limiter)
+        count = await put_corporate_actions(
+            client, settings.api_base_url, dataset, symbol, rows
+        )
+        upserted += count
+        logger.info(
+            "put %s symbol=%s count=%s status=200",
+            dataset,
+            symbol,
+            count,
+        )
+    return upserted
+
+
 async def ingest_symbol(
     session: FMPSession,
     client: httpx.AsyncClient,
@@ -168,98 +259,34 @@ async def ingest_symbol(
     windows: list[tuple[date, date]],
     datasets: list[str],
     interval: ChartInterval,
+    rate_limiter: RateLimiter | None = None,
+    local_rate_limiter: RateLimiter | None = None,
 ) -> tuple[int, str | None]:
     upserted = 0
-    chart = session.chart(symbol)
     try:
-        for start, end in windows:
-            if "eod" in datasets:
-                existing = await get_eod_coverage(
-                    client, settings.api_base_url, symbol, start, end
-                )
-                missing = missing_date_ranges(start, end, existing)
-                if not missing:
-                    logger.info(
-                        "skip existing eod symbol=%s from=%s to=%s",
-                        symbol,
-                        start.isoformat(),
-                        end.isoformat(),
-                    )
-                for from_date, to_date in missing:
-                    from_ = from_date.isoformat()
-                    to = to_date.isoformat()
-                    bars = await chart.historical_price_eod_full(from_=from_, to=to)
-                    payload = [eod_to_write(bar) for bar in bars]
-                    if payload:
-                        count = await put_eod(
-                            client, settings.api_base_url, symbol, payload
-                        )
-                        upserted += count
-                        logger.info(
-                            "put eod symbol=%s from=%s to=%s count=%s status=200",
-                            symbol,
-                            from_,
-                            to,
-                            count,
-                        )
-                    else:
-                        logger.info(
-                            "skip empty eod symbol=%s from=%s to=%s",
-                            symbol,
-                            from_,
-                            to,
-                        )
-            if "intraday" in datasets:
-                existing = await get_intraday_coverage(
-                    client,
-                    settings.api_base_url,
-                    symbol,
-                    interval,
-                    start,
-                    end,
-                )
-                missing = missing_date_ranges(start, end, existing)
-                if not missing:
-                    logger.info(
-                        "skip existing intraday symbol=%s interval=%s from=%s to=%s",
-                        symbol,
-                        interval,
-                        start.isoformat(),
-                        end.isoformat(),
-                    )
-                for from_date, to_date in missing:
-                    from_ = from_date.isoformat()
-                    to = to_date.isoformat()
-                    bars = await chart.historical_chart(
-                        interval, from_=from_, to=to
-                    )
-                    payload = [
-                        chart_to_write(bar, symbol, interval) for bar in bars
-                    ]
-                    if payload:
-                        count = await put_intraday(
-                            client,
-                            settings.api_base_url,
-                            symbol,
-                            interval,
-                            payload,
-                        )
-                        upserted += count
-                        logger.info(
-                            "put intraday symbol=%s interval=%s from=%s to=%s count=%s status=200",
-                            symbol,
-                            interval,
-                            from_,
-                            to,
-                            count,
-                        )
-                    else:
-                        logger.info(
-                            "skip empty intraday symbol=%s from=%s to=%s",
-                            symbol,
-                            from_,
-                            to,
-                        )
+        if BAR_DATASETS.intersection(datasets):
+            chart = session.chart(symbol)
+            upserted += await _ingest_bars(
+                chart,
+                client,
+                settings,
+                symbol,
+                windows,
+                datasets,
+                interval,
+                rate_limiter,
+                local_rate_limiter,
+            )
+        if any(dataset in datasets for dataset in CORPORATE_DATASETS):
+            upserted += await ingest_corporate_actions(
+                session,
+                client,
+                settings,
+                symbol,
+                datasets,
+                rate_limiter,
+                local_rate_limiter,
+            )
     except (
         FMPResponseError,
         httpx.HTTPError,
@@ -271,35 +298,201 @@ async def ingest_symbol(
     return upserted, None
 
 
-async def run_ingest(
+async def _fill_bar_window(
+    start: date,
+    end: date,
+    *,
+    get_coverage: Callable[[], Awaitable[set[date]]],
+    fetch_bars: Callable[[date, date], Awaitable[list[object]]],
+    put_bars: Callable[[list[object]], Awaitable[int]],
+    skip_existing: str,
+    put_fmt: str,
+    empty_fmt: str,
+    rate_limiter: RateLimiter | None,
+    local_rate_limiter: RateLimiter | None,
+) -> int:
+    upserted = 0
+    attempted: set[tuple[date, date]] = set()
+    while True:
+        await _acquire(local_rate_limiter)
+        existing = await get_coverage()
+        missing = missing_date_ranges(start, end, existing)
+        remaining = [window for window in missing if window not in attempted]
+        if not remaining:
+            if not missing and not attempted:
+                logger.info(skip_existing)
+            return upserted
+        wrote = False
+        for from_date, to_date in remaining:
+            attempted.add((from_date, to_date))
+            from_ = from_date.isoformat()
+            to = to_date.isoformat()
+            await _acquire(rate_limiter)
+            bars = await fetch_bars(from_date, to_date)
+            if not bars:
+                logger.info(empty_fmt, from_, to)
+                continue
+            await _acquire(local_rate_limiter)
+            count = await put_bars(bars)
+            upserted += count
+            wrote = True
+            logger.info(put_fmt, from_, to, count)
+        if not wrote:
+            return upserted
+
+
+async def _ingest_bars(
+    chart: Chart,
+    client: httpx.AsyncClient,
     settings: IngestSettings,
-    symbols: list[str],
-    lookback: str,
-    chunk_size: str,
+    symbol: str,
+    windows: list[tuple[date, date]],
     datasets: list[str],
     interval: ChartInterval,
+    rate_limiter: RateLimiter | None = None,
+    local_rate_limiter: RateLimiter | None = None,
+) -> int:
+    upserted = 0
+    for start, end in windows:
+        if "eod" in datasets:
+
+            async def eod_coverage(
+                window_start: date = start,
+                window_end: date = end,
+            ) -> set[date]:
+                return await get_eod_coverage(
+                    client,
+                    settings.api_base_url,
+                    symbol,
+                    window_start,
+                    window_end,
+                )
+
+            async def eod_fetch(from_date: date, to_date: date) -> list[object]:
+                bars = await chart.historical_price_eod_full(
+                    from_=from_date.isoformat(),
+                    to=to_date.isoformat(),
+                )
+                return [eod_to_write(bar) for bar in bars]
+
+            async def eod_put(payload: list[object]) -> int:
+                return await put_eod(
+                    client,
+                    settings.api_base_url,
+                    symbol,
+                    payload,  # type: ignore[arg-type]
+                )
+
+            upserted += await _fill_bar_window(
+                start,
+                end,
+                get_coverage=eod_coverage,
+                fetch_bars=eod_fetch,
+                put_bars=eod_put,
+                skip_existing=(
+                    f"skip existing eod symbol={symbol} from={start.isoformat()} "
+                    f"to={end.isoformat()}"
+                ),
+                put_fmt=(
+                    f"put eod symbol={symbol} from=%s to=%s count=%s status=200"
+                ),
+                empty_fmt=f"skip empty eod symbol={symbol} from=%s to=%s",
+                rate_limiter=rate_limiter,
+                local_rate_limiter=local_rate_limiter,
+            )
+        if "intraday" in datasets:
+
+            async def intraday_coverage(
+                window_start: date = start,
+                window_end: date = end,
+            ) -> set[date]:
+                return await get_intraday_coverage(
+                    client,
+                    settings.api_base_url,
+                    symbol,
+                    interval,
+                    window_start,
+                    window_end,
+                )
+
+            async def intraday_fetch(from_date: date, to_date: date) -> list[object]:
+                bars = await chart.historical_chart(
+                    interval,
+                    from_=from_date.isoformat(),
+                    to=to_date.isoformat(),
+                )
+                return [chart_to_write(bar, symbol, interval) for bar in bars]
+
+            async def intraday_put(payload: list[object]) -> int:
+                return await put_intraday(
+                    client,
+                    settings.api_base_url,
+                    symbol,
+                    interval,
+                    payload,  # type: ignore[arg-type]
+                )
+
+            upserted += await _fill_bar_window(
+                start,
+                end,
+                get_coverage=intraday_coverage,
+                fetch_bars=intraday_fetch,
+                put_bars=intraday_put,
+                skip_existing=(
+                    f"skip existing intraday symbol={symbol} interval={interval} "
+                    f"from={start.isoformat()} to={end.isoformat()}"
+                ),
+                put_fmt=(
+                    f"put intraday symbol={symbol} interval={interval} "
+                    f"from=%s to=%s count=%s status=200"
+                ),
+                empty_fmt=f"skip empty intraday symbol={symbol} from=%s to=%s",
+                rate_limiter=rate_limiter,
+                local_rate_limiter=local_rate_limiter,
+            )
+    return upserted
+
+
+async def run_ingest(
+    settings: IngestSettings,
+    jobs: Sequence[SymbolJob],
+    rate_limiter: RateLimiter,
+    local_rate_limiter: RateLimiter,
     *,
     today: date | None = None,
 ) -> int:
-    start, end = lookback_range(lookback, today=today)
-    windows = list(iter_chunks(start, end, parse_duration(chunk_size)))
     logger.info(
-        "ingest start symbols=%s lookback=%s chunk_size=%s windows=%s datasets=%s interval=%s",
-        symbols,
-        lookback,
-        chunk_size,
-        len(windows),
-        datasets,
-        interval,
+        "ingest start symbols=%s jobs=%s",
+        [job.symbol for job in jobs],
+        [
+            {
+                "symbol": job.symbol,
+                "lookback": job.lookback,
+                "chunk_size": job.chunk_size,
+                "datasets": job.datasets,
+                "interval": job.interval,
+            }
+            for job in jobs
+        ],
     )
     semaphore = asyncio.Semaphore(settings.ingest_concurrency)
     failed: list[str] = []
     total = 0
 
-    async def bounded(symbol: str) -> tuple[int, str | None]:
+    async def bounded(job: SymbolJob) -> tuple[int, str | None]:
+        start, end = lookback_range(job.lookback, today=today)
+        windows = list(iter_chunks(start, end, parse_duration(job.chunk_size)))
         async with semaphore:
             return await ingest_symbol(
-                session, client, settings, symbol, windows, datasets, interval
+                session,
+                client,
+                settings,
+                job.symbol,
+                windows,
+                job.datasets,
+                job.interval,
+                rate_limiter,
+                local_rate_limiter,
             )
 
     async with FMPSession(settings.fmp_api_key) as session:
@@ -307,7 +500,7 @@ async def run_ingest(
             await wait_for_health(
                 client, settings.api_base_url, settings.health_timeout_s
             )
-            results = await asyncio.gather(*(bounded(symbol) for symbol in symbols))
+            results = await asyncio.gather(*(bounded(job) for job in jobs))
 
     for count, failed_symbol in results:
         total += count

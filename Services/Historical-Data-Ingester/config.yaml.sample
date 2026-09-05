@@ -1,0 +1,22 @@
+num_api_calls_per_min: 300
+num_local_api_calls_per_min: 600
+
+default:
+  lookback: 30d
+  chunk_size: 7d
+  datasets:
+    - eod
+    - intraday
+    - dividends
+    - earnings
+    - splits
+  interval: 1min
+
+symbols:
+  AAPL:
+    lookback: 2y
+  MSFT:
+  GOOG:
+    datasets:
+      - eod
+      - dividends

@@ -5,9 +5,10 @@ description = "CLI job that fetches FMP historical bars and PUTs them to the His
 authors = [{ name = "Aaksh Ranjan" }]
 requires-python = ">=3.12"
 dependencies = [
-    "financialmodelingprep-sdk>=0.2.0",
+    "financialmodelingprep-sdk>=0.3.0",
     "httpx>=0.28.1",
     "pydantic-settings>=2.11.0",
+    "pyyaml>=6.0.2",
     "typer>=0.19.2",
 ]
 

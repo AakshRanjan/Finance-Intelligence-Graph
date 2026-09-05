@@ -16,6 +16,11 @@ def test_parse_symbols_normalizes_and_dedupes() -> None:
 
 def test_parse_datasets() -> None:
     assert parse_datasets("eod,intraday") == ["eod", "intraday"]
+    assert parse_datasets("dividends,earnings,splits") == [
+        "dividends",
+        "earnings",
+        "splits",
+    ]
 
 
 def test_eod_to_write_keeps_fmp_date() -> None:
