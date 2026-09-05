@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "APIs/Historical-Data/**"
+      - "FMP-SDK/**"
       - ".github/workflows/ci-historical-data-api.yml"
   push:
     branches: [master]
     paths:
       - "APIs/Historical-Data/**"
+      - "FMP-SDK/**"
       - ".github/workflows/ci-historical-data-api.yml"
 
 jobs:

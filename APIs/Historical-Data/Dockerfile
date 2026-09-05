@@ -3,6 +3,7 @@ FROM python:3.12-slim-bookworm
 COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /uvx /bin/
 
 WORKDIR /opt
+COPY FMP-SDK /opt/FMP-SDK
 COPY APIs/Historical-Data /opt/APIs/Historical-Data
 WORKDIR /opt/APIs/Historical-Data
 

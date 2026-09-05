@@ -25,6 +25,9 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "historical_data_api"
 
+[tool.uv.sources]
+financialmodelingprep-sdk = { path = "../../FMP-SDK" }
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",

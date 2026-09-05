@@ -264,15 +264,18 @@ wheels = [
 [[package]]
 name = "financialmodelingprep-sdk"
 version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
+source = { directory = "../../FMP-SDK" }
 dependencies = [
     { name = "aiohttp" },
     { name = "pydantic" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/cf/01bd8cb706eaab7bb6917e611046fb89339a7891e0689987300f33b5c43c/financialmodelingprep_sdk-0.2.0.tar.gz", hash = "sha256:e2cc07c493814a8592cf893c4f9fbe76834acba2740ea9baa2fc671e1bc1a550", size = 6047, upload-time = "2026-09-05T04:21:09.35Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/a6/a46ed48c4e593251f9cf77c9a5c10cb03c85744c51a08880cb8e61728e7f/financialmodelingprep_sdk-0.2.0-py3-none-any.whl", hash = "sha256:180713a799156db074a5fdc4dae3a6d9b01c142929e387577126aa7b8b4177ec", size = 10046, upload-time = "2026-09-05T04:21:08.542Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.14.3" },
+    { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "tenacity", specifier = ">=9.1.4" },
 ]
 
 [[package]]
@@ -467,7 +470,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.16.5" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "fastapi", specifier = ">=0.118.0" },
-    { name = "financialmodelingprep-sdk", specifier = ">=0.2.0" },
+    { name = "financialmodelingprep-sdk", directory = "../../FMP-SDK" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.10" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
