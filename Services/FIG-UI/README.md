@@ -1,6 +1,6 @@
 # FIG UI
 
-React shell for Finance Intelligence Graph. Modules register in `src/modules/registry.ts`; Historical Data is the first module. `/` is the home page of module icons. Opening a module shows a left sidebar of that module’s sub-modules (Charts for Historical Data).
+React shell for Finance Intelligence Graph. Modules register in `src/modules/registry.ts`; Historical Data is the first module. `/` is the home page of module icons. Opening a module shows a left sidebar of that module’s sub-modules (Charts and Corporate Actions for Historical Data).
 
 ## Docker
 
@@ -35,6 +35,6 @@ Home, the router, and the module sidebar all read that list. Keep module API cli
 ## Adding a sub-module
 
 1. Add a page component under the module folder.
-2. Append a `FigSubModule` (`id`, `title`, `path`, `icon`, `Component`) to that module’s `children`. `path` is relative (for example `charts` → `/historical-data/charts`).
+2. Append a `FigSubModule` (`id`, `title`, `path`, `icon`, `Component`) to that module’s `children`. `path` is relative (for example `charts` → `/historical-data/charts`, `corporate-actions` → `/historical-data/corporate-actions`).
 
 The module sidebar and nested routes both read `children`.

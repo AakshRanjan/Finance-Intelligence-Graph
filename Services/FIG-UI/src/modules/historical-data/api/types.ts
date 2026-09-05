@@ -48,3 +48,49 @@ export interface IntradayBar {
 export type Bar = EodBar | IntradayBar
 
 export const API_BAR_LIMIT = 5000
+
+export const CORPORATE_ACTION_KINDS = [
+  'dividends',
+  'earnings',
+  'splits',
+] as const
+
+export type CorporateActionKind = (typeof CORPORATE_ACTION_KINDS)[number]
+
+export const EARNINGS_METRICS = ['eps', 'revenue'] as const
+
+export type EarningsMetric = (typeof EARNINGS_METRICS)[number]
+
+export interface Dividend {
+  symbol: string
+  date: string
+  recordDate?: string | null
+  paymentDate?: string | null
+  declarationDate?: string | null
+  adjDividend: number
+  dividend: number
+  yield: number
+  frequency: string
+}
+
+export interface Earning {
+  symbol: string
+  date: string
+  epsActual?: number | null
+  epsEstimated?: number | null
+  revenueActual?: number | null
+  revenueEstimated?: number | null
+  lastUpdated: string
+}
+
+export interface Split {
+  symbol: string
+  date: string
+  numerator: number
+  denominator: number
+  splitType: string
+}
+
+export type CorporateAction = Dividend | Earning | Split
+
+export const API_CORPORATE_ACTION_LIMIT = 5000

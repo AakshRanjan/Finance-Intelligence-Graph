@@ -1,4 +1,12 @@
-import type { ChartInterval, EodBar, IntradayBar, SymbolCatalog } from './types'
+import type {
+  ChartInterval,
+  Dividend,
+  Earning,
+  EodBar,
+  IntradayBar,
+  Split,
+  SymbolCatalog,
+} from './types'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
@@ -96,6 +104,45 @@ export async function fetchIntraday(
       from,
       to,
     },
+    signal,
+  )
+}
+
+export async function fetchDividends(
+  symbol: string,
+  from: string,
+  to: string,
+  signal?: AbortSignal,
+): Promise<Dividend[]> {
+  return getJson<Dividend[]>(
+    `/v1/dividends/${encodeURIComponent(symbol)}`,
+    { from, to },
+    signal,
+  )
+}
+
+export async function fetchEarnings(
+  symbol: string,
+  from: string,
+  to: string,
+  signal?: AbortSignal,
+): Promise<Earning[]> {
+  return getJson<Earning[]>(
+    `/v1/earnings/${encodeURIComponent(symbol)}`,
+    { from, to },
+    signal,
+  )
+}
+
+export async function fetchSplits(
+  symbol: string,
+  from: string,
+  to: string,
+  signal?: AbortSignal,
+): Promise<Split[]> {
+  return getJson<Split[]>(
+    `/v1/splits/${encodeURIComponent(symbol)}`,
+    { from, to },
     signal,
   )
 }

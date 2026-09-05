@@ -1,11 +1,13 @@
 import type { Mode } from './types'
 
-export const EOD_PRESETS = ['1M', '3M', '1Y', 'YTD'] as const
+export const EOD_PRESETS = ['1M', '3M', '1Y', '5Y', 'YTD'] as const
 export const INTRADAY_PRESETS = ['1D', '5D', '1M'] as const
+export const CORPORATE_ACTION_PRESETS = ['1Y', '5Y', '10Y', 'YTD'] as const
 
 export type EodPreset = (typeof EOD_PRESETS)[number]
 export type IntradayPreset = (typeof INTRADAY_PRESETS)[number]
-export type RangePreset = EodPreset | IntradayPreset
+export type CorporateActionPreset = (typeof CORPORATE_ACTION_PRESETS)[number]
+export type RangePreset = EodPreset | IntradayPreset | CorporateActionPreset
 
 function utcDateString(date: Date): string {
   return date.toISOString().slice(0, 10)
@@ -13,6 +15,10 @@ function utcDateString(date: Date): string {
 
 export function defaultRange(mode: Mode): { from: string; to: string } {
   return rangeFromPreset(mode === 'eod' ? '1Y' : '5D')
+}
+
+export function defaultCorporateActionRange(): { from: string; to: string } {
+  return rangeFromPreset('5Y')
 }
 
 export function rangeFromPreset(preset: RangePreset): { from: string; to: string } {
@@ -28,18 +34,21 @@ export function rangeFromPreset(preset: RangePreset): { from: string; to: string
     from.setUTCMonth(from.getUTCMonth() - 3)
   } else if (preset === '1Y') {
     from.setUTCFullYear(from.getUTCFullYear() - 1)
+  } else if (preset === '5Y') {
+    from.setUTCFullYear(from.getUTCFullYear() - 5)
+  } else if (preset === '10Y') {
+    from.setUTCFullYear(from.getUTCFullYear() - 10)
   } else {
     from.setUTCMonth(0, 1)
   }
   return { from: utcDateString(from), to: utcDateString(to) }
 }
 
-export function matchingPreset(
-  mode: Mode,
+function matchingPresetFromList<T extends RangePreset>(
+  presets: readonly T[],
   from: string,
   to: string,
-): RangePreset | null {
-  const presets = mode === 'eod' ? EOD_PRESETS : INTRADAY_PRESETS
+): T | null {
   const today = utcDateString(new Date())
   if (to !== today) {
     return null
@@ -50,6 +59,22 @@ export function matchingPreset(
     }
   }
   return null
+}
+
+export function matchingPreset(
+  mode: Mode,
+  from: string,
+  to: string,
+): RangePreset | null {
+  const presets = mode === 'eod' ? EOD_PRESETS : INTRADAY_PRESETS
+  return matchingPresetFromList(presets, from, to)
+}
+
+export function matchingCorporateActionPreset(
+  from: string,
+  to: string,
+): CorporateActionPreset | null {
+  return matchingPresetFromList(CORPORATE_ACTION_PRESETS, from, to)
 }
 
 export function rangeQuery(
