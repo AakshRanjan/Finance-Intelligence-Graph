@@ -8,6 +8,14 @@
 
 <!-- version list -->
 
+## v0.3.0 (2026-09-05)
+
+### Features
+
+- **fmp-sdk**: Add corporate-actions endpoints for dividends, earnings, and splits
+  ([`1758c00`](https://github.com/AakshRanjan/Finance-Intelligence-Graph/commit/1758c000b0501f9d1ba4b5e768c270a0eff2e4d3))
+
+
 ## v0.2.0 (2026-09-05)
 
 ### Features
