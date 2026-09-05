@@ -1,14 +1,14 @@
-name: CI Historical-Data-Ingest
+name: CI Historical-Data-Ingester
 
 on:
   pull_request:
     paths:
-      - "Services/Historical-Data-Ingest/**"
+      - "Services/Historical-Data-Ingester/**"
       - ".github/workflows/ci-historical-data-ingest.yml"
   push:
     branches: [master]
     paths:
-      - "Services/Historical-Data-Ingest/**"
+      - "Services/Historical-Data-Ingester/**"
       - ".github/workflows/ci-historical-data-ingest.yml"
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Services/Historical-Data-Ingest
+        working-directory: Services/Historical-Data-Ingester
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -25,7 +25,7 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          working-directory: Services/Historical-Data-Ingest
+          working-directory: Services/Historical-Data-Ingester
 
       - name: Sync
         run: uv sync --locked --group dev
