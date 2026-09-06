@@ -29,6 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { ScaleToggle } from '@/modules/historical-data/chart/ScaleToggle'
+import type { ChartScale } from '@/modules/historical-data/chart/scale'
 
 interface ToolbarProps {
   mode: Mode
@@ -36,6 +38,7 @@ interface ToolbarProps {
   from: string
   to: string
   interval: ChartInterval
+  scale: ChartScale
   catalog: SymbolInfo[]
   onModeChange: (mode: Mode) => void
   onSymbolChange: (symbol: string) => void
@@ -43,6 +46,7 @@ interface ToolbarProps {
   onToChange: (to: string) => void
   onIntervalChange: (interval: ChartInterval) => void
   onPreset: (preset: RangePreset) => void
+  onScaleChange: (scale: ChartScale) => void
 }
 
 export function Toolbar({
@@ -51,6 +55,7 @@ export function Toolbar({
   from,
   to,
   interval,
+  scale,
   catalog,
   onModeChange,
   onSymbolChange,
@@ -58,6 +63,7 @@ export function Toolbar({
   onToChange,
   onIntervalChange,
   onPreset,
+  onScaleChange,
 }: ToolbarProps) {
   const listed = catalog.find(
     (item) => item.symbol === symbol.trim().toUpperCase(),
@@ -187,6 +193,8 @@ export function Toolbar({
               ))}
             </ToggleGroup>
           </div>
+
+          <ScaleToggle value={scale} onChange={onScaleChange} />
 
           <div className="flex min-w-36 flex-col gap-1.5">
             <Label htmlFor="from">From</Label>

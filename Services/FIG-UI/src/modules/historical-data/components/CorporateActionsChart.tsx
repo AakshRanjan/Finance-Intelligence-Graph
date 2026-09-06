@@ -1,13 +1,17 @@
-import { useMemo, type ReactNode } from 'react'
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-} from 'recharts'
+  HistogramSeries,
+  LineSeries,
+  LineType,
+  createSeriesMarkers,
+  type HistogramData,
+  type IChartApi,
+  type ISeriesApi,
+  type LineData,
+  type MouseEventParams,
+  type Time,
+  type WhitespaceData,
+} from 'lightweight-charts'
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 
 import type {
   CorporateAction,
@@ -17,17 +21,22 @@ import type {
   EarningsMetric,
   Split,
 } from '@/modules/historical-data/api/types'
+import { ChartFrame } from '@/modules/historical-data/chart/host'
+import { useLightweightChart } from '@/modules/historical-data/chart/use-lightweight-chart'
+import type { ChartScale } from '@/modules/historical-data/chart/scale'
 import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  type ChartConfig,
-} from '@/components/ui/chart'
-
-const TEAL = '#26a69a'
-const INDIGO = '#5c6bc0'
-const SLATE = '#90a4ae'
+  DOWN_COLOR,
+  LINE_COLOR,
+  MUTED_SERIES_COLOR,
+  UP_COLOR,
+} from '@/modules/historical-data/chart/theme'
+import { ChartTooltipOverlay } from '@/modules/historical-data/chart/tooltip'
+import { useChartTooltip } from '@/modules/historical-data/chart/use-chart-tooltip'
+import {
+  uniqueByTime,
+  utcDay,
+  withWhitespace,
+} from '@/modules/historical-data/chart/whitespace'
 
 const numberFormat = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 4,
@@ -39,20 +48,6 @@ const factorFormat = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 4,
 })
 
-const dividendConfig = {
-  dividend: { label: 'Dividend', color: TEAL },
-  adjDividend: { label: 'Adj dividend', color: INDIGO },
-} satisfies ChartConfig
-
-const earningsConfig = {
-  actual: { label: 'Actual', color: TEAL },
-  estimated: { label: 'Estimated', color: SLATE },
-} satisfies ChartConfig
-
-const splitConfig = {
-  factor: { label: 'Share factor', color: TEAL },
-} satisfies ChartConfig
-
 interface CorporateActionsChartProps {
   kind: CorporateActionKind
   rows: CorporateAction[]
@@ -60,11 +55,11 @@ interface CorporateActionsChartProps {
   from: string
   to: string
   earningsMetric: EarningsMetric
+  scale: ChartScale
 }
 
 interface DividendPoint {
-  label: string
-  tooltipLabel: string
+  time: Time
   dividend: number
   adjDividend: number
   yield: number
@@ -72,28 +67,17 @@ interface DividendPoint {
 }
 
 interface EarningsPoint {
-  label: string
-  tooltipLabel: string
+  time: Time
   actual: number | null
   estimated: number | null
 }
 
 interface SplitPoint {
-  x: number
-  label: string
-  tooltipLabel: string
+  time: Time
   factor: number
   isEvent: boolean
   ratio?: string
   splitType?: string
-}
-
-function formatDate(value: string): string {
-  return value.slice(0, 10)
-}
-
-function toUtcMs(value: string): number {
-  return Date.parse(`${formatDate(value)}T00:00:00Z`)
 }
 
 function formatNumber(value: number | null | undefined): string {
@@ -115,8 +99,7 @@ function toDividendPoints(rows: CorporateAction[]): DividendPoint[] {
     .map((row) => row as Dividend)
     .sort((left, right) => left.date.localeCompare(right.date))
     .map((row) => ({
-      label: formatDate(row.date),
-      tooltipLabel: formatDate(row.date),
+      time: utcDay(row.date),
       dividend: row.dividend,
       adjDividend: row.adjDividend,
       yield: row.yield,
@@ -132,8 +115,7 @@ function toEarningsPoints(
     .map((row) => row as Earning)
     .sort((left, right) => left.date.localeCompare(right.date))
     .map((row) => ({
-      label: formatDate(row.date),
-      tooltipLabel: formatDate(row.date),
+      time: utcDay(row.date),
       actual:
         metric === 'eps' ? (row.epsActual ?? null) : (row.revenueActual ?? null),
       estimated:
@@ -151,13 +133,9 @@ function toSplitPoints(
   const splits = [...rows]
     .map((row) => row as Split)
     .sort((left, right) => left.date.localeCompare(right.date))
-  const fromMs = toUtcMs(from)
-  const toMs = toUtcMs(to)
   const points: SplitPoint[] = [
     {
-      x: fromMs,
-      label: formatDate(from),
-      tooltipLabel: formatDate(from),
+      time: utcDay(from),
       factor: 1,
       isEvent: false,
     },
@@ -169,9 +147,7 @@ function toSplitPoints(
     }
     factor *= split.numerator / split.denominator
     points.push({
-      x: toUtcMs(split.date),
-      label: formatDate(split.date),
-      tooltipLabel: formatDate(split.date),
+      time: utcDay(split.date),
       factor,
       isEvent: true,
       ratio: `${split.numerator}/${split.denominator}`,
@@ -179,128 +155,167 @@ function toSplitPoints(
     })
   }
   const last = points[points.length - 1]
-  if (last !== undefined && last.x < toMs) {
+  const toTime = utcDay(to)
+  if (last !== undefined && String(last.time) < toTime) {
     points.push({
-      x: toMs,
-      label: formatDate(to),
-      tooltipLabel: formatDate(to),
+      time: toTime,
       factor: last.factor,
       isEvent: false,
     })
   }
-  return points
+  return uniqueByTime(points)
 }
 
-function DividendTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean
-  payload?: ReadonlyArray<{ payload: DividendPoint }>
-}): ReactNode {
-  if (active !== true || payload === undefined || payload.length === 0) {
-    return null
-  }
-  const point = payload[0].payload
+function LegendSwatch({ color, label }: { color: string; label: string }) {
   return (
-    <div className="grid min-w-40 gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs shadow-md">
-      <p className="font-medium text-foreground">{point.tooltipLabel}</p>
-      <p>Dividend {formatNumber(point.dividend)}</p>
-      <p>Adj dividend {formatNumber(point.adjDividend)}</p>
-      <p>Yield {formatNumber(point.yield)}%</p>
-      <p>Frequency {point.frequency || '—'}</p>
-    </div>
+    <span className="flex items-center gap-1.5">
+      <span
+        className="size-2 rounded-sm"
+        style={{ backgroundColor: color }}
+        aria-hidden
+      />
+      {label}
+    </span>
   )
 }
 
-function EarningsTooltip({
-  active,
-  payload,
-  metric,
-}: {
-  active?: boolean
-  payload?: ReadonlyArray<{ payload: EarningsPoint }>
-  metric: EarningsMetric
-}): ReactNode {
-  if (active !== true || payload === undefined || payload.length === 0) {
-    return null
-  }
-  const point = payload[0].payload
-  const format = metric === 'revenue' ? formatRevenue : formatNumber
-  const beat =
-    point.actual !== null &&
-    point.estimated !== null &&
-    point.actual >= point.estimated
-  return (
-    <div className="grid min-w-40 gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs shadow-md">
-      <p className="font-medium text-foreground">{point.tooltipLabel}</p>
-      <p>Actual {format(point.actual)}</p>
-      <p>Estimated {format(point.estimated)}</p>
-      {point.actual !== null && point.estimated !== null ? (
-        <p>{beat ? 'Beat' : 'Miss'}</p>
-      ) : null}
-    </div>
-  )
+function isHistogramData(data: unknown): data is HistogramData {
+  return typeof data === 'object' && data !== null && 'value' in data
 }
 
-function SplitTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean
-  payload?: ReadonlyArray<{ payload: SplitPoint }>
-}): ReactNode {
-  if (active !== true || payload === undefined || payload.length === 0) {
-    return null
-  }
-  const point = payload[0].payload
-  return (
-    <div className="grid min-w-40 gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs shadow-md">
-      <p className="font-medium text-foreground">{point.tooltipLabel}</p>
-      {point.isEvent ? (
-        <>
-          <p>Ratio {point.ratio ?? '—'}</p>
-          <p>Type {point.splitType || '—'}</p>
-        </>
-      ) : null}
-      <p>1 share became {factorFormat.format(point.factor)}</p>
-    </div>
-  )
+function isLineData(data: unknown): data is LineData {
+  return typeof data === 'object' && data !== null && 'value' in data
 }
 
-function SplitEventDot(props: {
-  cx?: number
-  cy?: number
-  payload?: SplitPoint
+function ChartPane({
+  summary,
+  legend,
+  setup,
+  tooltip,
+}: {
+  summary: string
+  legend?: ReactNode
+  setup: (chart: IChartApi) => void | (() => void)
+  tooltip: (params: MouseEventParams<Time>) => ReactNode | null
 }) {
-  if (
-    props.payload?.isEvent !== true ||
-    props.cx === undefined ||
-    props.cy === undefined
-  ) {
-    return null
-  }
+  const { setContainer, chart } = useLightweightChart()
+  const hover = useChartTooltip(chart, tooltip)
+
+  useEffect(() => {
+    if (chart === null) {
+      return
+    }
+    return setup(chart)
+  }, [chart, setup])
+
   return (
-    <circle
-      cx={props.cx}
-      cy={props.cy}
-      r={4}
-      fill="var(--color-factor)"
-      stroke="var(--background)"
-      strokeWidth={1}
-    />
+    <ChartFrame summary={summary} legend={legend}>
+      <div className="relative min-h-[240px] w-full flex-1">
+        <div ref={setContainer} className="h-full min-h-[240px] w-full" />
+        <ChartTooltipOverlay hover={hover} />
+      </div>
+    </ChartFrame>
   )
 }
 
 function DividendsChart({
   points,
   symbol,
+  scale,
 }: {
   points: DividendPoint[]
   symbol: string
+  scale: ChartScale
 }) {
   const first = points[0]
   const last = points[points.length - 1]
+  const histogramRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const lineRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const metaRef = useRef(new Map<string, DividendPoint>())
+
+  const filled = useMemo(
+    () => withWhitespace(points, scale, { kind: 'day' }),
+    [points, scale],
+  )
+  const histogramData = useMemo(
+    (): Array<HistogramData | WhitespaceData> =>
+      filled.map((point) =>
+        'dividend' in point
+          ? { time: point.time, value: point.dividend, color: UP_COLOR }
+          : { time: point.time },
+      ),
+    [filled],
+  )
+  const lineData = useMemo(
+    (): Array<LineData | WhitespaceData> =>
+      filled.map((point) =>
+        'adjDividend' in point
+          ? { time: point.time, value: point.adjDividend }
+          : { time: point.time },
+      ),
+    [filled],
+  )
+
+  useEffect(() => {
+    const map = new Map<string, DividendPoint>()
+    for (const point of points) {
+      map.set(String(point.time), point)
+    }
+    metaRef.current = map
+  }, [points])
+
+  const setup = useCallback(
+    (chart: IChartApi) => {
+      const histogram = chart.addSeries(HistogramSeries, {
+        color: UP_COLOR,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+      const line = chart.addSeries(LineSeries, {
+        color: LINE_COLOR,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+      histogram.setData(histogramData)
+      line.setData(lineData)
+      chart.timeScale().fitContent()
+      histogramRef.current = histogram
+      lineRef.current = line
+      return () => {
+        histogramRef.current = null
+        lineRef.current = null
+        chart.removeSeries(histogram)
+        chart.removeSeries(line)
+      }
+    },
+    [histogramData, lineData],
+  )
+
+  const tooltip = useCallback((params: MouseEventParams<Time>): ReactNode | null => {
+    const histogram = histogramRef.current
+    if (histogram === null) {
+      return null
+    }
+    const data = params.seriesData.get(histogram)
+    if (!isHistogramData(data)) {
+      return null
+    }
+    const meta = metaRef.current.get(String(data.time))
+    if (meta === undefined) {
+      return null
+    }
+    return (
+      <>
+        <p className="font-medium text-foreground">{String(meta.time)}</p>
+        <p>Dividend {formatNumber(meta.dividend)}</p>
+        <p>Adj dividend {formatNumber(meta.adjDividend)}</p>
+        <p>Yield {formatNumber(meta.yield)}%</p>
+        <p>Frequency {meta.frequency || '—'}</p>
+      </>
+    )
+  }, [])
+
   if (first === undefined || last === undefined) {
     return (
       <div className="flex h-full min-h-[280px] items-center justify-center text-muted-foreground">
@@ -308,54 +323,21 @@ function DividendsChart({
       </div>
     )
   }
-  const summary = `${symbol} dividends: ${points.length.toLocaleString()} payments from ${first.tooltipLabel} to ${last.tooltipLabel}.`
+
+  const summary = `${symbol} dividends: ${points.length.toLocaleString()} payments from ${String(first.time)} to ${String(last.time)}.`
 
   return (
-    <div className="relative flex h-full min-h-[280px] w-full flex-1 flex-col">
-      <p className="sr-only">{summary}</p>
-      <ChartContainer
-        config={dividendConfig}
-        className="aspect-auto h-full min-h-[280px] w-full"
-      >
-        <BarChart
-          accessibilityLayer
-          data={points}
-          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-        >
-          <CartesianGrid vertical={false} stroke="var(--border)" />
-          <XAxis
-            dataKey="label"
-            tickLine={false}
-            axisLine={false}
-            minTickGap={24}
-            tickMargin={8}
-          />
-          <YAxis
-            orientation="right"
-            tickLine={false}
-            axisLine={false}
-            width={64}
-            tickFormatter={(value: number) => numberFormat.format(value)}
-          />
-          <ChartTooltip content={<DividendTooltip />} />
-          <ChartLegend content={<ChartLegendContent />} />
-          <Bar
-            dataKey="dividend"
-            fill="var(--color-dividend)"
-            radius={2}
-            isAnimationActive={false}
-            maxBarSize={32}
-          />
-          <Bar
-            dataKey="adjDividend"
-            fill="var(--color-adjDividend)"
-            radius={2}
-            isAnimationActive={false}
-            maxBarSize={32}
-          />
-        </BarChart>
-      </ChartContainer>
-    </div>
+    <ChartPane
+      summary={summary}
+      setup={setup}
+      tooltip={tooltip}
+      legend={
+        <div className="flex flex-wrap gap-3 px-3 pt-2 text-xs text-muted-foreground">
+          <LegendSwatch color={UP_COLOR} label="Dividend" />
+          <LegendSwatch color={LINE_COLOR} label="Adj dividend" />
+        </div>
+      }
+    />
   )
 }
 
@@ -363,13 +345,118 @@ function EarningsChart({
   points,
   symbol,
   metric,
+  scale,
 }: {
   points: EarningsPoint[]
   symbol: string
   metric: EarningsMetric
+  scale: ChartScale
 }) {
   const first = points[0]
   const last = points[points.length - 1]
+  const histogramRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const metaRef = useRef(new Map<string, EarningsPoint>())
+
+  const filled = useMemo(
+    () => withWhitespace(points, scale, { kind: 'day' }),
+    [points, scale],
+  )
+  const histogramData = useMemo(
+    (): Array<HistogramData | WhitespaceData> =>
+      filled.map((point) =>
+        'actual' in point && point.actual !== null
+          ? { time: point.time, value: point.actual, color: UP_COLOR }
+          : { time: point.time },
+      ),
+    [filled],
+  )
+  const lineData = useMemo(
+    (): Array<LineData | WhitespaceData> =>
+      filled.map((point) =>
+        'estimated' in point && point.estimated !== null
+          ? { time: point.time, value: point.estimated }
+          : { time: point.time },
+      ),
+    [filled],
+  )
+
+  useEffect(() => {
+    const map = new Map<string, EarningsPoint>()
+    for (const point of points) {
+      map.set(String(point.time), point)
+    }
+    metaRef.current = map
+  }, [points])
+
+  const setup = useCallback(
+    (chart: IChartApi) => {
+      const histogram = chart.addSeries(HistogramSeries, {
+        color: UP_COLOR,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        priceFormat:
+          metric === 'revenue'
+            ? { type: 'volume' }
+            : { type: 'price', precision: 4, minMove: 0.0001 },
+      })
+      const line = chart.addSeries(LineSeries, {
+        color: MUTED_SERIES_COLOR,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+      histogram.setData(histogramData)
+      line.setData(lineData)
+      chart.timeScale().fitContent()
+      histogramRef.current = histogram
+      return () => {
+        histogramRef.current = null
+        chart.removeSeries(histogram)
+        chart.removeSeries(line)
+      }
+    },
+    [histogramData, lineData, metric],
+  )
+
+  const tooltip = useCallback(
+    (params: MouseEventParams<Time>): ReactNode | null => {
+      const histogram = histogramRef.current
+      const time = params.time
+      const meta =
+        time !== undefined
+          ? metaRef.current.get(String(time))
+          : histogram !== null && isHistogramData(params.seriesData.get(histogram))
+            ? metaRef.current.get(
+                String(
+                  (params.seriesData.get(histogram) as HistogramData).time,
+                ),
+              )
+            : undefined
+      if (meta === undefined) {
+        return null
+      }
+      if (meta.actual === null && meta.estimated === null) {
+        return null
+      }
+      const format = metric === 'revenue' ? formatRevenue : formatNumber
+      const beat =
+        meta.actual !== null &&
+        meta.estimated !== null &&
+        meta.actual >= meta.estimated
+      return (
+        <>
+          <p className="font-medium text-foreground">{String(meta.time)}</p>
+          <p>Actual {format(meta.actual)}</p>
+          <p>Estimated {format(meta.estimated)}</p>
+          {meta.actual !== null && meta.estimated !== null ? (
+            <p>{beat ? 'Beat' : 'Miss'}</p>
+          ) : null}
+        </>
+      )
+    },
+    [metric],
+  )
+
   if (first === undefined || last === undefined) {
     return (
       <div className="flex h-full min-h-[280px] items-center justify-center text-muted-foreground">
@@ -377,74 +464,130 @@ function EarningsChart({
       </div>
     )
   }
+
   const metricLabel = metric === 'eps' ? 'EPS' : 'revenue'
-  const summary = `${symbol} ${metricLabel}: ${points.length.toLocaleString()} reports from ${first.tooltipLabel} to ${last.tooltipLabel}.`
+  const summary = `${symbol} ${metricLabel}: ${points.length.toLocaleString()} reports from ${String(first.time)} to ${String(last.time)}.`
 
   return (
-    <div className="relative flex h-full min-h-[280px] w-full flex-1 flex-col">
-      <p className="sr-only">{summary}</p>
-      <ChartContainer
-        config={earningsConfig}
-        className="aspect-auto h-full min-h-[280px] w-full"
-      >
-        <BarChart
-          accessibilityLayer
-          data={points}
-          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-        >
-          <CartesianGrid vertical={false} stroke="var(--border)" />
-          <XAxis
-            dataKey="label"
-            tickLine={false}
-            axisLine={false}
-            minTickGap={24}
-            tickMargin={8}
-          />
-          <YAxis
-            orientation="right"
-            tickLine={false}
-            axisLine={false}
-            width={72}
-            tickFormatter={(value: number) =>
-              metric === 'revenue'
-                ? revenueFormat.format(value)
-                : numberFormat.format(value)
-            }
-          />
-          <ChartTooltip content={<EarningsTooltip metric={metric} />} />
-          <ChartLegend content={<ChartLegendContent />} />
-          <Bar
-            dataKey="actual"
-            fill="var(--color-actual)"
-            radius={2}
-            isAnimationActive={false}
-            maxBarSize={32}
-          />
-          <Bar
-            dataKey="estimated"
-            fill="var(--color-estimated)"
-            radius={2}
-            isAnimationActive={false}
-            maxBarSize={32}
-          />
-        </BarChart>
-      </ChartContainer>
-    </div>
+    <ChartPane
+      summary={summary}
+      setup={setup}
+      tooltip={tooltip}
+      legend={
+        <div className="flex flex-wrap gap-3 px-3 pt-2 text-xs text-muted-foreground">
+          <LegendSwatch color={UP_COLOR} label="Actual" />
+          <LegendSwatch color={MUTED_SERIES_COLOR} label="Estimated" />
+        </div>
+      }
+    />
   )
 }
 
 function SplitsChart({
   points,
   symbol,
-  fromMs,
-  toMs,
+  from,
+  to,
+  scale,
 }: {
   points: SplitPoint[]
   symbol: string
-  fromMs: number
-  toMs: number
+  from: string
+  to: string
+  scale: ChartScale
 }) {
-  const events = points.filter((point) => point.isEvent)
+  const events = useMemo(
+    () => points.filter((point) => point.isEvent),
+    [points],
+  )
+  const lineRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const metaRef = useRef(new Map<string, SplitPoint>())
+
+  const filled = useMemo(
+    () =>
+      withWhitespace(points, scale, { kind: 'day' }, {
+        from: utcDay(from),
+        to: utcDay(to),
+      }),
+    [from, points, scale, to],
+  )
+  const lineData = useMemo((): Array<LineData | WhitespaceData> => {
+    if (scale !== 'calendar') {
+      return points.map((point) => ({ time: point.time, value: point.factor }))
+    }
+    let factor = 1
+    return filled.map((point) => {
+      if ('factor' in point) {
+        factor = point.factor
+        return { time: point.time, value: point.factor }
+      }
+      return { time: point.time, value: factor }
+    })
+  }, [filled, points, scale])
+
+  useEffect(() => {
+    const map = new Map<string, SplitPoint>()
+    for (const point of points) {
+      map.set(String(point.time), point)
+    }
+    metaRef.current = map
+  }, [points])
+
+  const setup = useCallback(
+    (chart: IChartApi) => {
+      const line = chart.addSeries(LineSeries, {
+        color: UP_COLOR,
+        lineWidth: 2,
+        lineType: LineType.WithSteps,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+      line.setData(lineData)
+      const markers = createSeriesMarkers(
+        line,
+        events.map((event) => ({
+          time: event.time,
+          position: 'inBar' as const,
+          shape: 'circle' as const,
+          color: DOWN_COLOR,
+          size: 1,
+        })),
+      )
+      chart.timeScale().fitContent()
+      lineRef.current = line
+      return () => {
+        lineRef.current = null
+        markers.detach()
+        chart.removeSeries(line)
+      }
+    },
+    [events, lineData],
+  )
+
+  const tooltip = useCallback((params: MouseEventParams<Time>): ReactNode | null => {
+    const line = lineRef.current
+    if (line === null) {
+      return null
+    }
+    const data = params.seriesData.get(line)
+    if (!isLineData(data)) {
+      return null
+    }
+    const meta = metaRef.current.get(String(data.time))
+    return (
+      <>
+        <p className="font-medium text-foreground">{String(data.time)}</p>
+        {meta?.isEvent === true ? (
+          <>
+            <p>Ratio {meta.ratio ?? '—'}</p>
+            <p>Type {meta.splitType || '—'}</p>
+          </>
+        ) : null}
+        <p>1 share became {factorFormat.format(data.value)}</p>
+      </>
+    )
+  }, [])
+
   if (events.length === 0) {
     return (
       <div className="flex h-full min-h-[280px] items-center justify-center text-muted-foreground">
@@ -452,59 +595,22 @@ function SplitsChart({
       </div>
     )
   }
+
   const lastEvent = events[events.length - 1]
   const lastFactor = lastEvent?.factor ?? 1
-  const maxFactor = points.reduce(
-    (max, point) => Math.max(max, point.factor),
-    1,
-  )
   const summary = `${symbol} splits: ${events.length.toLocaleString()} events. 1 share became ${factorFormat.format(lastFactor)}.`
 
   return (
-    <div className="relative flex h-full min-h-[280px] w-full flex-1 flex-col">
-      <p className="sr-only">{summary}</p>
-      <ChartContainer
-        config={splitConfig}
-        className="aspect-auto h-full min-h-[280px] w-full"
-      >
-        <LineChart
-          accessibilityLayer
-          data={points}
-          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-        >
-          <CartesianGrid vertical={false} stroke="var(--border)" />
-          <XAxis
-            type="number"
-            dataKey="x"
-            domain={[fromMs, toMs]}
-            tickLine={false}
-            axisLine={false}
-            minTickGap={24}
-            tickMargin={8}
-            tickFormatter={(value: number) =>
-              new Date(value).toISOString().slice(0, 10)
-            }
-          />
-          <YAxis
-            orientation="right"
-            tickLine={false}
-            axisLine={false}
-            width={64}
-            domain={[0, maxFactor === 0 ? 1 : maxFactor * 1.1]}
-            tickFormatter={(value: number) => factorFormat.format(value)}
-          />
-          <ChartTooltip content={<SplitTooltip />} />
-          <Line
-            type="stepAfter"
-            dataKey="factor"
-            stroke="var(--color-factor)"
-            strokeWidth={2}
-            dot={SplitEventDot}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ChartContainer>
-    </div>
+    <ChartPane
+      summary={summary}
+      setup={setup}
+      tooltip={tooltip}
+      legend={
+        <div className="flex flex-wrap gap-3 px-3 pt-2 text-xs text-muted-foreground">
+          <LegendSwatch color={UP_COLOR} label="Share factor" />
+        </div>
+      }
+    />
   )
 }
 
@@ -515,6 +621,7 @@ export function CorporateActionsChart({
   from,
   to,
   earningsMetric,
+  scale,
 }: CorporateActionsChartProps) {
   const dividendPoints = useMemo(
     () => (kind === 'dividends' ? toDividendPoints(rows) : []),
@@ -531,7 +638,9 @@ export function CorporateActionsChart({
   )
 
   if (kind === 'dividends') {
-    return <DividendsChart points={dividendPoints} symbol={symbol} />
+    return (
+      <DividendsChart points={dividendPoints} symbol={symbol} scale={scale} />
+    )
   }
   if (kind === 'earnings') {
     return (
@@ -539,6 +648,7 @@ export function CorporateActionsChart({
         points={earningsPoints}
         symbol={symbol}
         metric={earningsMetric}
+        scale={scale}
       />
     )
   }
@@ -546,8 +656,9 @@ export function CorporateActionsChart({
     <SplitsChart
       points={splitPoints}
       symbol={symbol}
-      fromMs={toUtcMs(from)}
-      toMs={toUtcMs(to)}
+      from={from}
+      to={to}
+      scale={scale}
     />
   )
 }

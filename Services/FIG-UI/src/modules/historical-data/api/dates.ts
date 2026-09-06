@@ -1,7 +1,7 @@
 import type { Mode } from './types'
 
 export const EOD_PRESETS = ['1M', '3M', '1Y', '5Y', 'YTD'] as const
-export const INTRADAY_PRESETS = ['1D', '5D', '1M'] as const
+export const INTRADAY_PRESETS = EOD_PRESETS
 export const CORPORATE_ACTION_PRESETS = ['1Y', '5Y', '10Y', 'YTD'] as const
 
 export type EodPreset = (typeof EOD_PRESETS)[number]
@@ -13,8 +13,8 @@ function utcDateString(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
-export function defaultRange(mode: Mode): { from: string; to: string } {
-  return rangeFromPreset(mode === 'eod' ? '1Y' : '5D')
+export function defaultRange(_mode?: Mode): { from: string; to: string } {
+  return rangeFromPreset('1Y')
 }
 
 export function defaultCorporateActionRange(): { from: string; to: string } {
@@ -24,11 +24,7 @@ export function defaultCorporateActionRange(): { from: string; to: string } {
 export function rangeFromPreset(preset: RangePreset): { from: string; to: string } {
   const to = new Date()
   const from = new Date()
-  if (preset === '1D') {
-    from.setUTCDate(from.getUTCDate() - 1)
-  } else if (preset === '5D') {
-    from.setUTCDate(from.getUTCDate() - 5)
-  } else if (preset === '1M') {
+  if (preset === '1M') {
     from.setUTCMonth(from.getUTCMonth() - 1)
   } else if (preset === '3M') {
     from.setUTCMonth(from.getUTCMonth() - 3)

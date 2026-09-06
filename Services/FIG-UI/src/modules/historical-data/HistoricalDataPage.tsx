@@ -28,6 +28,7 @@ import { StatusBanner } from '@/modules/historical-data/components/StatusBanner'
 import { Toolbar } from '@/modules/historical-data/components/Toolbar'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { ChartScale } from '@/modules/historical-data/chart/scale'
 
 const LOAD_DEBOUNCE_MS = 300
 const REFRESH_MS = 5 * 60 * 1000
@@ -63,6 +64,7 @@ export function HistoricalDataPage() {
   const [from, setFrom] = useState(initial.from)
   const [to, setTo] = useState(initial.to)
   const [interval, setInterval] = useState<ChartInterval>('1hour')
+  const [scale, setScale] = useState<ChartScale>('session')
   const [catalog, setCatalog] = useState<SymbolInfo[]>([])
   const [bars, setBars] = useState<Bar[]>([])
   const [loading, setLoading] = useState(false)
@@ -242,11 +244,8 @@ export function HistoricalDataPage() {
   }, [])
 
   function handleModeChange(next: Mode) {
-    const range = defaultRange(next)
     const nextInterval = firstAvailableInterval(listed, interval)
     setMode(next)
-    setFrom(range.from)
-    setTo(range.to)
     setInterval(nextInterval)
     setInfo(null)
     setError(null)
@@ -290,6 +289,7 @@ export function HistoricalDataPage() {
         from={from}
         to={to}
         interval={interval}
+        scale={scale}
         catalog={catalog}
         onModeChange={handleModeChange}
         onSymbolChange={handleSymbolChange}
@@ -297,6 +297,7 @@ export function HistoricalDataPage() {
         onToChange={setTo}
         onIntervalChange={setInterval}
         onPreset={handlePreset}
+        onScaleChange={setScale}
       />
 
       <div aria-busy={loading} className="flex min-h-0 flex-1 flex-col gap-4">
@@ -320,7 +321,13 @@ export function HistoricalDataPage() {
                 )}
               </div>
             ) : (
-              <PriceChart bars={bars} mode={mode} symbol={displaySymbol} />
+              <PriceChart
+                bars={bars}
+                mode={mode}
+                symbol={displaySymbol}
+                interval={interval}
+                scale={scale}
+              />
             )}
           </CardContent>
           {loading && bars.length > 0 ? (

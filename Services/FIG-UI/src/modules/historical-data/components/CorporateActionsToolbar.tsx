@@ -20,6 +20,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { ScaleToggle } from '@/modules/historical-data/chart/ScaleToggle'
+import type { ChartScale } from '@/modules/historical-data/chart/scale'
 
 interface CorporateActionsToolbarProps {
   kind: CorporateActionKind
@@ -28,12 +30,14 @@ interface CorporateActionsToolbarProps {
   to: string
   catalog: SymbolInfo[]
   earningsMetric: EarningsMetric
+  scale: ChartScale
   onKindChange: (kind: CorporateActionKind) => void
   onSymbolChange: (symbol: string) => void
   onFromChange: (from: string) => void
   onToChange: (to: string) => void
   onPreset: (preset: CorporateActionPreset) => void
   onEarningsMetricChange: (metric: EarningsMetric) => void
+  onScaleChange: (scale: ChartScale) => void
 }
 
 function isCorporateActionKind(value: string): value is CorporateActionKind {
@@ -51,12 +55,14 @@ export function CorporateActionsToolbar({
   to,
   catalog,
   earningsMetric,
+  scale,
   onKindChange,
   onSymbolChange,
   onFromChange,
   onToChange,
   onPreset,
   onEarningsMetricChange,
+  onScaleChange,
 }: CorporateActionsToolbarProps) {
   const symbols = catalog.map((item) => item.symbol)
   const selectedSymbol = symbols.includes(symbol) ? symbol : null
@@ -169,6 +175,12 @@ export function CorporateActionsToolbar({
               ))}
             </ToggleGroup>
           </div>
+
+          <ScaleToggle
+            value={scale}
+            onChange={onScaleChange}
+            labelId="corporate-action-scale-label"
+          />
 
           <div className="flex min-w-36 flex-col gap-1.5">
             <Label htmlFor="corporate-action-from">From</Label>

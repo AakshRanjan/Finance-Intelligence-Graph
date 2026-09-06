@@ -27,6 +27,7 @@ import { CorporateActionsToolbar } from '@/modules/historical-data/components/Co
 import { StatusBanner } from '@/modules/historical-data/components/StatusBanner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { ChartScale } from '@/modules/historical-data/chart/scale'
 
 const LOAD_DEBOUNCE_MS = 300
 const REFRESH_MS = 5 * 60 * 1000
@@ -62,6 +63,7 @@ export function CorporateActionsPage() {
   const initial = defaultCorporateActionRange()
   const [kind, setKind] = useState<CorporateActionKind>('dividends')
   const [earningsMetric, setEarningsMetric] = useState<EarningsMetric>('eps')
+  const [scale, setScale] = useState<ChartScale>('session')
   const [symbol, setSymbol] = useState('')
   const [from, setFrom] = useState(initial.from)
   const [to, setTo] = useState(initial.to)
@@ -266,12 +268,14 @@ export function CorporateActionsPage() {
         to={to}
         catalog={catalog}
         earningsMetric={earningsMetric}
+        scale={scale}
         onKindChange={handleKindChange}
         onSymbolChange={setSymbol}
         onFromChange={setFrom}
         onToChange={setTo}
         onPreset={handlePreset}
         onEarningsMetricChange={setEarningsMetric}
+        onScaleChange={setScale}
       />
 
       <div aria-busy={loading} className="flex min-h-0 flex-1 flex-col gap-4">
@@ -302,6 +306,7 @@ export function CorporateActionsPage() {
                 from={from}
                 to={to}
                 earningsMetric={earningsMetric}
+                scale={scale}
               />
             )}
           </CardContent>
