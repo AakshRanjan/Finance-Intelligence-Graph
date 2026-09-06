@@ -11,7 +11,7 @@ import {
   type Time,
   type WhitespaceData,
 } from 'lightweight-charts'
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 
 import type {
   CorporateAction,
@@ -95,34 +95,38 @@ function formatRevenue(value: number | null | undefined): string {
 }
 
 function toDividendPoints(rows: CorporateAction[]): DividendPoint[] {
-  return [...rows]
-    .map((row) => row as Dividend)
-    .sort((left, right) => left.date.localeCompare(right.date))
-    .map((row) => ({
-      time: utcDay(row.date),
-      dividend: row.dividend,
-      adjDividend: row.adjDividend,
-      yield: row.yield,
-      frequency: row.frequency,
-    }))
+  return uniqueByTime(
+    [...rows]
+      .map((row) => row as Dividend)
+      .sort((left, right) => left.date.localeCompare(right.date))
+      .map((row) => ({
+        time: utcDay(row.date),
+        dividend: row.dividend,
+        adjDividend: row.adjDividend,
+        yield: row.yield,
+        frequency: row.frequency,
+      })),
+  )
 }
 
 function toEarningsPoints(
   rows: CorporateAction[],
   metric: EarningsMetric,
 ): EarningsPoint[] {
-  return [...rows]
-    .map((row) => row as Earning)
-    .sort((left, right) => left.date.localeCompare(right.date))
-    .map((row) => ({
-      time: utcDay(row.date),
-      actual:
-        metric === 'eps' ? (row.epsActual ?? null) : (row.revenueActual ?? null),
-      estimated:
-        metric === 'eps'
-          ? (row.epsEstimated ?? null)
-          : (row.revenueEstimated ?? null),
-    }))
+  return uniqueByTime(
+    [...rows]
+      .map((row) => row as Earning)
+      .sort((left, right) => left.date.localeCompare(right.date))
+      .map((row) => ({
+        time: utcDay(row.date),
+        actual:
+          metric === 'eps' ? (row.epsActual ?? null) : (row.revenueActual ?? null),
+        estimated:
+          metric === 'eps'
+            ? (row.epsEstimated ?? null)
+            : (row.revenueEstimated ?? null),
+      })),
+  )
 }
 
 function toSplitPoints(
@@ -201,7 +205,7 @@ function ChartPane({
   const { setContainer, chart } = useLightweightChart()
   const hover = useChartTooltip(chart, tooltip)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (chart === null) {
       return
     }
@@ -285,8 +289,12 @@ function DividendsChart({
       return () => {
         histogramRef.current = null
         lineRef.current = null
-        chart.removeSeries(histogram)
-        chart.removeSeries(line)
+        try {
+          chart.removeSeries(histogram)
+          chart.removeSeries(line)
+        } catch {
+          // Chart already disposed during unmount.
+        }
       }
     },
     [histogramData, lineData],
@@ -411,8 +419,12 @@ function EarningsChart({
       histogramRef.current = histogram
       return () => {
         histogramRef.current = null
-        chart.removeSeries(histogram)
-        chart.removeSeries(line)
+        try {
+          chart.removeSeries(histogram)
+          chart.removeSeries(line)
+        } catch {
+          // Chart already disposed during unmount.
+        }
       }
     },
     [histogramData, lineData, metric],
@@ -557,8 +569,12 @@ function SplitsChart({
       lineRef.current = line
       return () => {
         lineRef.current = null
-        markers.detach()
-        chart.removeSeries(line)
+        try {
+          markers.detach()
+          chart.removeSeries(line)
+        } catch {
+          // Chart already disposed during unmount.
+        }
       }
     },
     [events, lineData],

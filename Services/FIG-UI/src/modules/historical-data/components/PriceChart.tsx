@@ -9,7 +9,7 @@ import {
   type Time,
   type WhitespaceData,
 } from 'lightweight-charts'
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 
 import type {
   Bar,
@@ -154,7 +154,7 @@ export function PriceChart({
     metaByTime.current = map
   }, [candles])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (chart === null) {
       return
     }
@@ -197,8 +197,12 @@ export function PriceChart({
     candleSeriesRef.current = candleSeries
     return () => {
       candleSeriesRef.current = null
-      chart.removeSeries(candleSeries)
-      chart.removeSeries(volumeSeries)
+      try {
+        chart.removeSeries(candleSeries)
+        chart.removeSeries(volumeSeries)
+      } catch {
+        // Chart already disposed during unmount.
+      }
     }
   }, [candleData, chart, mode, theme, volumeData])
 

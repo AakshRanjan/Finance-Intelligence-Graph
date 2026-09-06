@@ -1,5 +1,5 @@
 import type { IChartApi, MouseEventParams, Time } from 'lightweight-charts'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useState, type ReactNode } from 'react'
 
 import type { ChartHover } from '@/modules/historical-data/chart/tooltip'
 
@@ -9,7 +9,7 @@ export function useChartTooltip(
 ): ChartHover | null {
   const [hover, setHover] = useState<ChartHover | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (chart === null) {
       setHover(null)
       return
@@ -32,7 +32,11 @@ export function useChartTooltip(
     }
     chart.subscribeCrosshairMove(handler)
     return () => {
-      chart.unsubscribeCrosshairMove(handler)
+      try {
+        chart.unsubscribeCrosshairMove(handler)
+      } catch {
+        // Chart already disposed during unmount.
+      }
       setHover(null)
     }
   }, [chart, render])

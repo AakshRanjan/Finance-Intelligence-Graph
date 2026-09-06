@@ -15,7 +15,6 @@ export interface ChartTheme {
   foreground: string
   border: string
   mutedForeground: string
-  grid: string
   up: string
   down: string
 }
@@ -48,16 +47,6 @@ function resolveCssColor(variable: string, fallback: string): string {
   const resolved = getComputedStyle(probe).color
   probe.remove()
   return cssToRgba(resolved === '' ? fallback : resolved, fallback)
-}
-
-function withAlpha(color: string, alpha: number): string {
-  const match = color.match(
-    /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/,
-  )
-  if (match === null) {
-    return color
-  }
-  return `rgba(${match[1]}, ${match[2]}, ${match[3]}, ${alpha})`
 }
 
 export function parseUnsupportedCssColor(
@@ -97,7 +86,6 @@ export function readChartTheme(): ChartTheme {
     foreground,
     border,
     mutedForeground,
-    grid: withAlpha(border, 0.6),
     up: UP_COLOR,
     down: DOWN_COLOR,
   }
@@ -113,27 +101,27 @@ export function chartOptionsFromTheme(
       attributionLogo: true,
     },
     grid: {
-      vertLines: { color: theme.grid },
-      horzLines: { color: theme.grid },
+      vertLines: { visible: false },
+      horzLines: { visible: false },
     },
     crosshair: {
       mode: CrosshairMode.Normal,
       vertLine: {
-        color: theme.mutedForeground,
+        color: theme.border,
         width: 1,
         labelBackgroundColor: theme.foreground,
       },
       horzLine: {
-        color: theme.mutedForeground,
+        color: theme.border,
         width: 1,
         labelBackgroundColor: theme.foreground,
       },
     },
     rightPriceScale: {
-      borderColor: theme.border,
+      borderVisible: false,
     },
     timeScale: {
-      borderColor: theme.border,
+      borderVisible: false,
       rightOffset: 4,
     },
   }

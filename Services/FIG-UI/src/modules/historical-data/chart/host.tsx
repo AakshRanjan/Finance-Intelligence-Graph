@@ -1,22 +1,5 @@
 import type { ReactNode } from 'react'
 
-export function ChartAttribution() {
-  return (
-    <p className="px-3 pb-1.5 text-[10px] leading-none text-muted-foreground">
-      Charting by{' '}
-      <a
-        href="https://www.tradingview.com/lightweight-charts/"
-        target="_blank"
-        rel="noreferrer"
-        className="underline-offset-2 hover:underline"
-      >
-        TradingView Lightweight Charts
-      </a>{' '}
-      (Apache-2.0)
-    </p>
-  )
-}
-
 export function ChartFrame({
   className,
   summary,
@@ -38,7 +21,6 @@ export function ChartFrame({
       <p className="sr-only">{summary}</p>
       {legend}
       {children}
-      <ChartAttribution />
     </div>
   )
 }
